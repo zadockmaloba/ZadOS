@@ -3,7 +3,27 @@
 //! commonly found in ARM platforms and QEMU.
 
 const std = @import("std");
-const root = @import("root");
+
+//For simple UART operations without configuration
+pub fn simple_putc(c: u8) void {
+    // Directly write to UART data register
+    const uart_base = @as(*volatile u32, @ptrFromInt(0x09000000 + 0x000));
+    uart_base.* = @as(u32, c);
+}
+
+//For simple UART operations without configuration
+pub fn simple_getc() u8 {
+    // Read from UART data register
+    const uart_base = @as(*volatile u32, @ptrFromInt(0x09000000 + 0x000));
+    return @truncate(uart_base.*);
+}
+
+//For simple UART operations without configuration
+pub fn simple_print(str: []const u8) void {
+    for (str) |c| {
+        simple_putc(c);
+    }
+}
 
 /// UART Base address for QEMU virt machine
 const UART_BASE = 0x09000000;
@@ -87,7 +107,7 @@ const Uart = struct {
             if ((self.readReg(Register.FR) & FR_BUSY) != 0) {
                 return Error.Busy;
             }
-            @import("std").atomic.spinLoopHint();
+            std.atomic.spinLoopHint();
         }
 
         self.writeReg(Register.DR, byte);

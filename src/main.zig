@@ -5,10 +5,11 @@ const uart = @import("drivers/uart.zig");
 // This is our kernel entry point called from start.S
 export fn kernel_main() callconv(.C) void {
     // Initialize UART
-    uart.init();
+    //uart.init();
 
+    uart.simple_print("ZadOS is booting 1...\n");
     // Print welcome message
-    _ = uart.print("ZadOS is booting...\n") catch {};
+    _ = uart.print("ZadOS is booting 2...\n") catch {};
 
     // Main kernel loop
     while (true) {
