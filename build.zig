@@ -73,11 +73,11 @@ pub fn build(b: *std.Build) void {
     const QemuArgs = struct {
         pub const normal: []const []const u8 = &[_][]const u8{
             "qemu-system-aarch64",
-            "-M",
+            "-machine",
             "virt",
             "-cpu",
             "cortex-a72",
-            //"-nographic",
+            "-nographic",
             "-kernel",
         };
         pub const debug: []const []const u8 = &[_][]const u8{
