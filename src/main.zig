@@ -1,12 +1,18 @@
 //! The main kernel file for ZadOS
 const std = @import("std");
+const uart = @import("drivers/uart.zig");
 
 // This is our kernel entry point called from start.S
 export fn kernel_main() callconv(.C) void {
-    // In bare metal, we can't use std.debug.print yet
-    // We'll implement UART output later
+    // Initialize UART
+    uart.init();
+
+    // Print welcome message
+    _ = uart.print("ZadOS is booting...\n") catch {};
+
+    // Main kernel loop
     while (true) {
-        @import("std").atomic.spinLoopHint();
+        std.atomic.spinLoopHint();
     }
 }
 
