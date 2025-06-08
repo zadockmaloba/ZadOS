@@ -1,35 +1,12 @@
 ENTRY(_start)
 
-SECTIONS
-{
-    /* Kernel starts at 0x80000 for Raspberry Pi 3 */
-    . = 0x80000;
-
-    .text.boot : {
-        *(.text.boot)
-    }
-
-    .text : {
-        *(.text)
-    }
-
-    .rodata : {
-        *(.rodata)
-    }
-
-    .data : {
-        *(.data)
-    }
-
+SECTIONS {
+    . = 0x40100000; /* RAM starts at 0x40000000 but if we ask to load the kernel there, QEMU will not load a DTB */
+    .startup . : { boot.o(.text) }
+    .text : { *(.text) }
+    .data : { *(.data) }
+    .bss : { *(.bss COMMON) }
     . = ALIGN(8);
-    __bss_start = .;
-    .bss : {
-        *(.bss)
-    }
-    __bss_end = .;
-
-    /* Add a stack section */
-    . = ALIGN(16);
-    . = . + 0x4000; /* 16KB stack */
+    . += 0x1000; /* 4kB of stack memory */
     stack_top = .;
 }
