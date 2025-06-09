@@ -171,7 +171,11 @@ pub fn print(str: []const u8) Error!void {
 
 /// Write a formatted string to UART
 pub fn printf(comptime format: []const u8, args: anytype) Error!void {
-    var buf: [256]u8 = undefined;
-    const str = std.fmt.bufPrint(&buf, format, args) catch return Error.BufferFull;
-    return uart0.writeString(str);
+    var buf: [10]u8 = [_]u8{0} ** 10; // Buffer for formatted output
+    const str = std.fmt.bufPrintZ(&buf, format ++ "\x00", args) catch {
+        simple_print("Error formatting string\n");
+        return Error.BufferFull;
+    };
+    simple_print(str);
+    return uart0.writeString(format);
 }

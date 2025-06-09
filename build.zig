@@ -20,7 +20,7 @@ pub fn build(b: *std.Build) void {
 
     // For bare metal, we want to optimize for size initially
     const optimize = b.standardOptimizeOption(.{
-        .preferred_optimize_mode = .ReleaseSmall,
+        //.preferred_optimize_mode = .ReleaseSmall,
     });
 
     // We will also create a module for our other entry point, 'main.zig'.
