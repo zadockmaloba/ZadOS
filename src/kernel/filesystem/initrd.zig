@@ -57,13 +57,13 @@ pub const InitrdFS = struct {
 
     /// See vfs.FileSystem.getRootNode
     fn getRootNode(fs: *const vfs.FileSystem) *const vfs.DirNode {
-        var self = @fieldParentPtr(InitrdFS, "instance", fs.instance);
+        var self = @as(InitrdFS, @fieldParentPtr("instance", fs.instance));
         return &self.root_node.Dir;
     }
 
     /// See vfs.FileSystem.close
     fn close(fs: *const vfs.FileSystem, node: *const vfs.Node) void {
-        var self = @fieldParentPtr(InitrdFS, "instance", fs.instance);
+        var self = @as(InitrdFS, @fieldParentPtr("instance", fs.instance));
         // As close can't error, if provided with a invalid Node that isn't opened or try to close
         // the same file twice, will just do nothing.
         if (self.opened_files.remove(node)) {
@@ -73,8 +73,8 @@ pub const InitrdFS = struct {
 
     /// See vfs.FileSystem.read
     fn read(fs: *const vfs.FileSystem, file_node: *const vfs.FileNode, bytes: []u8) (Allocator.Error || vfs.Error)!usize {
-        var self = @fieldParentPtr(InitrdFS, "instance", fs.instance);
-        const node = @ptrCast(*const vfs.Node, file_node);
+        var self = @as(InitrdFS, @fieldParentPtr("instance", fs.instance));
+        const node = @as(*const vfs.Node, @ptrCast(file_node));
         const file_header = self.opened_files.get(node) orelse return vfs.Error.NotOpened;
         const length = std.math.min(bytes.len, file_header.content.len);
         std.mem.copy(u8, bytes, file_header.content[0..length]);
@@ -92,7 +92,7 @@ pub const InitrdFS = struct {
 
     /// See vfs.FileSystem.open
     fn open(fs: *const vfs.FileSystem, dir: *const vfs.DirNode, name: []const u8, flags: vfs.OpenFlags, args: vfs.OpenArgs) (Allocator.Error || vfs.Error)!*vfs.Node {
-        var self = @fieldParentPtr(InitrdFS, "instance", fs.instance);
+        var self = @as(InitrdFS, @fieldParentPtr("instance", fs.instance));
         // Suppress unused var warning
         _ = args;
         _ = dir;
@@ -103,7 +103,7 @@ pub const InitrdFS = struct {
                     if (std.mem.eql(u8, file.name, name)) {
                         // Opening 2 files of the same name, will create 2 different Nodes
                         // Create a node
-                        var node = try self.allocator.create(vfs.Node);
+                        const node = try self.allocator.create(vfs.Node);
                         errdefer self.allocator.destroy(node);
                         node.* = .{ .File = .{ .fs = self.fs } };
                         try self.opened_files.put(node, file);
@@ -206,9 +206,9 @@ pub const InitrdFS = struct {
 
         var rd_fs = try allocator.create(InitrdFS);
         errdefer allocator.destroy(rd_fs);
-        var fs = try allocator.create(vfs.FileSystem);
+        const fs = try allocator.create(vfs.FileSystem);
         errdefer allocator.destroy(fs);
-        var root_node = try allocator.create(vfs.Node);
+        const root_node = try allocator.create(vfs.Node);
 
         root_node.* = .{ .Dir = .{ .fs = fs, .mount = null } };
         fs.* = .{
@@ -267,7 +267,7 @@ fn createInitrd(allocator: Allocator) ![]u8 {
     } else sum;
 
     const total_ramdisk_len = @sizeOf(usize) + files_length;
-    var ramdisk_bytes = try allocator.alloc(u8, total_ramdisk_len);
+    const ramdisk_bytes = try allocator.alloc(u8, total_ramdisk_len);
     var ramdisk_stream = std.io.fixedBufferStream(ramdisk_bytes);
 
     // Copy the data into the allocated memory
@@ -289,7 +289,7 @@ fn createInitrd(allocator: Allocator) ![]u8 {
 }
 
 test "init with files valid" {
-    var ramdisk_bytes = try createInitrd(std.testing.allocator);
+    const ramdisk_bytes = try createInitrd(std.testing.allocator);
     defer std.testing.allocator.free(ramdisk_bytes);
 
     var initrd_stream = std.io.fixedBufferStream(ramdisk_bytes);
@@ -352,7 +352,7 @@ test "init with files cleans memory if OutOfMemory" {
     while (i < init_allocations) : (i += 1) {
         var fa = std.testing.FailingAllocator.init(std.testing.allocator, i);
 
-        var ramdisk_bytes = try createInitrd(std.testing.allocator);
+        const ramdisk_bytes = try createInitrd(std.testing.allocator);
         defer std.testing.allocator.free(ramdisk_bytes);
 
         var initrd_stream = std.io.fixedBufferStream(ramdisk_bytes);
@@ -361,7 +361,7 @@ test "init with files cleans memory if OutOfMemory" {
 }
 
 test "getRootNode" {
-    var ramdisk_bytes = try createInitrd(std.testing.allocator);
+    const ramdisk_bytes = try createInitrd(std.testing.allocator);
     defer std.testing.allocator.free(ramdisk_bytes);
 
     var initrd_stream = std.io.fixedBufferStream(ramdisk_bytes);
@@ -372,7 +372,7 @@ test "getRootNode" {
 }
 
 test "open valid file" {
-    var ramdisk_bytes = try createInitrd(std.testing.allocator);
+    const ramdisk_bytes = try createInitrd(std.testing.allocator);
     defer std.testing.allocator.free(ramdisk_bytes);
 
     var initrd_stream = std.io.fixedBufferStream(ramdisk_bytes);
@@ -385,7 +385,7 @@ test "open valid file" {
     defer file1.close();
 
     try expectEqual(fs.opened_files.count(), 1);
-    try expectEqualSlices(u8, fs.opened_files.get(@ptrCast(*const vfs.Node, file1)).?.name, "test1.txt");
+    try expectEqualSlices(u8, fs.opened_files.get(@as(*const vfs.Node, @ptrCast(file1))).?.name, "test1.txt");
 
     var file3_node = try vfs.open("/test3.txt", true, .NO_CREATION, .{});
     defer file3_node.File.close();
@@ -402,7 +402,7 @@ test "open valid file" {
 }
 
 test "open fail with invalid flags" {
-    var ramdisk_bytes = try createInitrd(std.testing.allocator);
+    const ramdisk_bytes = try createInitrd(std.testing.allocator);
     defer std.testing.allocator.free(ramdisk_bytes);
 
     var initrd_stream = std.io.fixedBufferStream(ramdisk_bytes);
@@ -429,7 +429,7 @@ test "open fail with invalid flags" {
 }
 
 test "open fail with NoSuchFileOrDir" {
-    var ramdisk_bytes = try createInitrd(std.testing.allocator);
+    const ramdisk_bytes = try createInitrd(std.testing.allocator);
     defer std.testing.allocator.free(ramdisk_bytes);
 
     var initrd_stream = std.io.fixedBufferStream(ramdisk_bytes);
@@ -444,7 +444,7 @@ test "open fail with NoSuchFileOrDir" {
 test "open a file, out of memory" {
     var fa = std.testing.FailingAllocator.init(std.testing.allocator, init_allocations);
 
-    var ramdisk_bytes = try createInitrd(std.testing.allocator);
+    const ramdisk_bytes = try createInitrd(std.testing.allocator);
     defer std.testing.allocator.free(ramdisk_bytes);
 
     var initrd_stream = std.io.fixedBufferStream(ramdisk_bytes);
@@ -457,7 +457,7 @@ test "open a file, out of memory" {
 }
 
 test "open two of the same file" {
-    var ramdisk_bytes = try createInitrd(std.testing.allocator);
+    const ramdisk_bytes = try createInitrd(std.testing.allocator);
     defer std.testing.allocator.free(ramdisk_bytes);
 
     var initrd_stream = std.io.fixedBufferStream(ramdisk_bytes);
@@ -483,7 +483,7 @@ test "open two of the same file" {
 }
 
 test "close a file" {
-    var ramdisk_bytes = try createInitrd(std.testing.allocator);
+    const ramdisk_bytes = try createInitrd(std.testing.allocator);
     defer std.testing.allocator.free(ramdisk_bytes);
 
     var initrd_stream = std.io.fixedBufferStream(ramdisk_bytes);
@@ -513,7 +513,7 @@ test "close a file" {
 }
 
 test "close a non-opened file" {
-    var ramdisk_bytes = try createInitrd(std.testing.allocator);
+    const ramdisk_bytes = try createInitrd(std.testing.allocator);
     defer std.testing.allocator.free(ramdisk_bytes);
 
     var initrd_stream = std.io.fixedBufferStream(ramdisk_bytes);
@@ -540,7 +540,7 @@ test "close a non-opened file" {
 }
 
 test "read a file" {
-    var ramdisk_bytes = try createInitrd(std.testing.allocator);
+    const ramdisk_bytes = try createInitrd(std.testing.allocator);
     defer std.testing.allocator.free(ramdisk_bytes);
 
     var initrd_stream = std.io.fixedBufferStream(ramdisk_bytes);
@@ -564,7 +564,7 @@ test "read a file" {
 }
 
 test "read a file, invalid/not opened/crafted *const Node" {
-    var ramdisk_bytes = try createInitrd(std.testing.allocator);
+    const ramdisk_bytes = try createInitrd(std.testing.allocator);
     defer std.testing.allocator.free(ramdisk_bytes);
 
     var initrd_stream = std.io.fixedBufferStream(ramdisk_bytes);
@@ -593,7 +593,7 @@ test "read a file, invalid/not opened/crafted *const Node" {
 }
 
 test "write does nothing" {
-    var ramdisk_bytes = try createInitrd(std.testing.allocator);
+    const ramdisk_bytes = try createInitrd(std.testing.allocator);
     defer std.testing.allocator.free(ramdisk_bytes);
 
     var initrd_stream = std.io.fixedBufferStream(ramdisk_bytes);
@@ -609,7 +609,7 @@ test "write does nothing" {
     try expectEqual(@as(usize, 0), try file1.write("Blah"));
 
     // Unchanged file content
-    try expectEqualSlices(u8, fs.opened_files.get(@ptrCast(*const vfs.Node, file1)).?.content, "This is a test");
+    try expectEqualSlices(u8, fs.opened_files.get(@as(*const vfs.Node, @ptrCast(file1))).?.content, "This is a test");
 }
 
 /// See std.testing.expectEqualSlices. As need our panic.
