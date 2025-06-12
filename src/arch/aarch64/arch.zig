@@ -1,6 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const idt = @import("idt.zig");
+const gic = @import("gic.zig");
 const log = std.log.scoped(.arm64_arch);
 const builtin = @import("builtin");
 const uart = @import("uart.zig");
@@ -80,9 +80,15 @@ pub const CpuState = packed struct {
     ttbr0: u64, // Translation table base register 0
     ttbr1: u64, // Translation table base register 1
 
+    spsr: u64, // Saved Program Status Register
+    elr: u64, // Exception Link Register
+
     // Exception info
     esr: u64, // Exception syndrome register
     far: u64, // Fault address register
+
+    error_code: u64 = 0x00,
+    eip: u64 = 0x00, // Exception instruction pointer
 
     pub fn empty() CpuState {
         return .{
@@ -124,6 +130,8 @@ pub const CpuState = packed struct {
             .ttbr1 = undefined,
             .esr = undefined,
             .far = undefined,
+            .spsr = undefined,
+            .elr = undefined,
         };
     }
 };
@@ -138,10 +146,13 @@ pub const BootPayload = struct {
 pub const VmmPayload = *paging.PageTable;
 
 /// The payload used in the kernel virtual memory manager
-pub const KERNEL_VMM_PAYLOAD = &paging.kernel_page_table;
+pub const KERNEL_VMM_PAYLOAD = &paging.kernel_directory;
 
 /// The architecture's virtual memory mapper
-pub const VMM_MAPPER: vmm.Mapper(VmmPayload) = vmm.Mapper(VmmPayload){ .mapFn = paging.map, .unmapFn = paging.unmap };
+pub const VMM_MAPPER: vmm.Mapper(VmmPayload) = vmm.Mapper(VmmPayload){
+    .mapFn = &paging.map,
+    .unmapFn = &paging.unmap,
+};
 
 /// The size of each allocatable block of memory (64KB for ARM64)
 pub const MEMORY_BLOCK_SIZE: usize = 64 * 1024;
@@ -202,6 +213,12 @@ fn writeSerialCom1(byte: u8) void {
     serial.write(byte, serial.Port.COM1);
 }
 
+fn writeUart(byte: u8) void {
+    uart.putc(byte) catch {
+        @panic("Error writing to UART\n");
+    };
+}
+
 ///
 /// Initialise serial communication using port COM1 and construct a Serial instance
 ///
@@ -214,7 +231,7 @@ fn writeSerialCom1(byte: u8) void {
 pub fn initSerial(boot_payload: BootPayload) Serial {
     _ = boot_payload;
     return Serial{
-        .write = uart.write,
+        .write = writeUart,
     };
 }
 
@@ -230,7 +247,7 @@ pub fn initSerial(boot_payload: BootPayload) Serial {
 pub fn initTTY(boot_payload: BootPayload) TTY {
     _ = boot_payload;
     return .{
-        .print = uart.puts,
+        .print = uart.print,
         .setCursor = uart.setCursor,
         .cols = 80,
         .rows = 25,
@@ -326,7 +343,7 @@ pub fn initMem(boot_payload: BootPayload) Allocator.Error!MemProfile {
 ///     OutOfMemory - Unable to allocate space for the stack.
 ///
 pub fn initTask(task: *Task, entry_point: usize, allocator: Allocator, set_up_stack: bool) Allocator.Error!void {
-    task.vmm.payload = &paging.kernel_page_table;
+    task.vmm.payload = &paging.kernel_directory;
 
     if (set_up_stack) {
         const stack = &task.kernel_stack;
@@ -352,7 +369,7 @@ pub fn initTask(task: *Task, entry_point: usize, allocator: Allocator, set_up_st
     if (!task.kernel and !builtin.is_test) {
         // Create new translation tables for user task
         const new_tt = try allocator.create(paging.PageTable);
-        new_tt.* = paging.kernel_page_table;
+        new_tt.* = paging.kernel_directory;
         task.vmm.payload = new_tt;
     }
 }

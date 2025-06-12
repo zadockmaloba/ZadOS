@@ -1,7 +1,11 @@
 const arch = @import("arch.zig");
 const syscalls = @import("syscalls.zig");
 const irq = @import("irq.zig");
-const idt = @import("idt.zig");
+const std = @import("std");
+const log = std.log.scoped(.interrupts);
+const gic = @import("gic.zig");
+const uart = @import("uart.zig");
+const scheduler = @import("../../kernel/scheduler.zig");
 
 extern fn irqHandler(ctx: *arch.CpuState) usize;
 extern fn isrHandler(ctx: *arch.CpuState) usize;
@@ -23,84 +27,62 @@ export fn handler(ctx: *arch.CpuState) usize {
 }
 
 ///
-/// The common assembly that all exceptions and interrupts will call.
+/// Initialize interrupt handling
 ///
-export fn commonStub() callconv(.Naked) void {
-    asm volatile (
-        \\pusha
-        \\push  %%ds
-        \\push  %%es
-        \\push  %%fs
-        \\push  %%gs
-        \\mov %%cr3, %%eax
-        \\push %%eax
-        \\mov   $0x10, %%ax
-        \\mov   %%ax, %%ds
-        \\mov   %%ax, %%es
-        \\mov   %%ax, %%fs
-        \\mov   %%ax, %%gs
-        \\mov   %%esp, %%eax
-        \\push  %%eax
-        \\call  handler
-        \\mov   %%eax, %%esp
-    );
+pub fn init() void {
+    log.info("Initializing interrupts...\n", .{});
 
-    // Pop off the new cr3 then check if it's the same as the previous cr3
-    // If so don't change cr3 to avoid a TLB flush
-    asm volatile (
-        \\pop   %%eax
-        \\mov   %%cr3, %%ebx
-        \\cmp   %%eax, %%ebx
-        \\je    same_cr3
-        \\mov   %%eax, %%cr3
-        \\same_cr3:
-        \\pop   %%gs
-        \\pop   %%fs
-        \\pop   %%es
-        \\pop   %%ds
-        \\popa
-    );
-    // The Tss.esp0 value is the stack pointer used when an interrupt occurs. This should be the current process' stack pointer
-    // So skip the rest of the CpuState, set Tss.esp0 then un-skip the last few fields of the CpuState
-    asm volatile (
-        \\add   $0x1C, %%esp
-        \\.extern main_tss_entry
-        \\mov   %%esp, (main_tss_entry + 4)
-        \\sub   $0x14, %%esp
-        \\iret
-    );
+    // Initialize the GIC
+    gic.init();
+
+    // Register handlers for basic interrupts
+    gic.registerHandler(IRQ_UART, uart_handler);
+    gic.registerHandler(IRQ_TIMER, timer_handler);
+
+    // Enable specific interrupts
+    gic.enableInterrupt(IRQ_UART);
+    gic.enableInterrupt(IRQ_TIMER);
 }
 
 ///
-/// Generate the function that is the entry point for each exception/interrupt. This will then be
-/// used as the handler for the corresponding IDT entry.
+/// UART interrupt handler
 ///
-/// Arguments:
-///     IN interrupt_num: u32 - The interrupt number to generate the function for.
-///
-/// Return: idt.InterruptHandler
-///     The stub function that is called for each interrupt/exception.
-///
-pub fn getInterruptStub(comptime interrupt_num: u32) idt.InterruptHandler {
-    return struct {
-        fn func() callconv(.Naked) void {
-            asm volatile (
-                \\ cli
-            );
+fn uart_handler() void {
+    uart.handleInterrupt();
+}
 
-            // These interrupts don't push an error code onto the stack, so will push a zero.
-            if (interrupt_num != 8 and !(interrupt_num >= 10 and interrupt_num <= 14) and interrupt_num != 17) {
-                asm volatile (
-                    \\ pushl $0
-                );
-            }
+///
+/// Timer interrupt handler
+///
+fn timer_handler() void {
+    scheduler.tick();
+}
 
-            asm volatile (
-                \\ pushl %[nr]
-                \\ jmp commonStub
-                :
-                : [nr] "n" (interrupt_num),
-            );
-        }
-    }.func;
+///
+/// Interrupt numbers for common devices
+///
+const IRQ_UART: u32 = 33; // PL011 UART
+const IRQ_TIMER: u32 = 27; // ARM Generic Timer
+
+///
+/// Hardware specific interrupt handling, called from assembly
+///
+pub export fn handleException(_type: u32, esr: u64, elr: u64) void {
+    switch (_type) {
+        0 => { // Synchronous
+            log.err("Synchronous exception: ESR=0x{X}, ELR=0x{X}\n", .{ esr, elr });
+        },
+        1 => { // IRQ
+            gic.handleInterrupt();
+        },
+        2 => { // FIQ
+            log.err("FIQ not implemented\n", .{});
+        },
+        3 => { // SError
+            log.err("SError: ESR=0x{X}, ELR=0x{X}\n", .{ esr, elr });
+        },
+        else => {
+            log.err("Unknown exception type {}\n", .{_type});
+        },
+    }
 }

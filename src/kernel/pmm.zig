@@ -108,17 +108,17 @@ pub fn init(mem_profile: *const MemProfile, allocator: Allocator) void {
 
     // Occupy the regions of memory that the memory map describes as reserved
     for (mem_profile.physical_reserved) |entry| {
-        var addr = std.mem.alignBackward(entry.start, BLOCK_SIZE);
+        var addr = std.mem.alignBackward(usize, entry.start, BLOCK_SIZE);
         var end = entry.end - 1;
         // If the end address can be aligned without overflowing then align it
         if (end <= std.math.maxInt(usize) - BLOCK_SIZE) {
-            end = std.mem.alignForward(end, BLOCK_SIZE);
+            end = std.mem.alignForward(usize, end, BLOCK_SIZE);
         }
         while (addr < end) : (addr += BLOCK_SIZE) {
             setAddr(addr) catch |e| switch (e) {
                 // We can ignore out of bounds errors as the memory won't be available anyway
                 bitmap.BitmapError.OutOfBounds => break,
-                else => panic(@errorReturnTrace(), "Failed setting address 0x{x} from memory map as occupied: {}", .{ addr, e }),
+                //else => panic(@errorReturnTrace(), "Failed setting address 0x{x} from memory map as occupied: {}", .{ addr, e }),
             };
         }
     }
@@ -228,7 +228,7 @@ fn runtimeTests(mem_profile: *const MemProfile, allocator: Allocator) void {
         }
         prev_alloc = alloced;
         for (mem_profile.physical_reserved) |entry| {
-            const addr = std.mem.alignBackward(@as(usize, @intCast(entry.start)), BLOCK_SIZE);
+            const addr = std.mem.alignBackward(usize, @as(usize, @intCast(entry.start)), BLOCK_SIZE);
             if (addr == alloced) {
                 panic(null, "FAILURE: PMM allocated an address that should be reserved by the memory map: 0x{x}", .{addr});
             }

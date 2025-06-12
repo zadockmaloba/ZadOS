@@ -93,7 +93,7 @@ pub const FileSystem = struct {
     ///     IN self: *const FileSystem - The filesystem in question being operated on.
     ///     IN node: *const Node - The node being closed.
     ///
-    const Close = fn (self: *const Self, node: *const Node) void;
+    const Close = *const fn (self: *const Self, node: *const Node) void;
 
     ///
     /// Read from an open file
@@ -110,7 +110,7 @@ pub const FileSystem = struct {
     ///     Allocator.Error.OutOfMemory - There wasn't enough memory to fulfill the request
     ///     Error.NotOpened - If the node provided is not one that the file system recognised as being opened.
     ///
-    const Read = fn (self: *const Self, node: *const FileNode, buffer: []u8) (Allocator.Error || Error)!usize;
+    const Read = *const fn (self: *const Self, node: *const FileNode, buffer: []u8) (Allocator.Error || Error)!usize;
 
     ///
     /// Write to an open file
@@ -126,7 +126,7 @@ pub const FileSystem = struct {
     /// Error: Allocator.Error
     ///     Allocator.Error.OutOfMemory - There wasn't enough memory to fulfill the request
     ///
-    const Write = fn (self: *const Self, node: *const FileNode, bytes: []const u8) (Allocator.Error || Error)!usize;
+    const Write = *const fn (self: *const Self, node: *const FileNode, bytes: []const u8) (Allocator.Error || Error)!usize;
 
     ///
     /// Open a file/dir within the filesystem. The result can then be used for write, read or close operations
@@ -146,7 +146,7 @@ pub const FileSystem = struct {
     ///     Error.NoSuchFileOrDir - The file/dir by that name doesn't exist and the flags didn't specify to create it
     ///     Error.NoSymlinkTarget - A symlink was created but no symlink target was provided in the args
     ///
-    const Open = fn (self: *const Self, node: *const DirNode, name: []const u8, flags: OpenFlags, args: OpenArgs) (Allocator.Error || Error)!*Node;
+    const Open = *const fn (self: *const Self, node: *const DirNode, name: []const u8, flags: OpenFlags, args: OpenArgs) (Allocator.Error || Error)!*Node;
 
     ///
     /// Get the node representing the root of the filesystem. Used when mounting to bind the mount point to the root of the mounted fs
@@ -157,7 +157,7 @@ pub const FileSystem = struct {
     /// Return: *const DirNode
     ///     The root directory node
     ///
-    const GetRootNode = fn (self: *const Self) *const DirNode;
+    const GetRootNode = *const fn (self: *const Self) *const DirNode;
 
     /// The close function
     close: Close,
@@ -654,7 +654,7 @@ const TestFS = struct {
         const test_fs = @as(TestFS, @fieldParentPtr("instance", fs.instance));
         // Get the tree that corresponds to the node. Cannot error as the file is already open so it does exist
         const tree = (getTreeNode(test_fs, node) catch unreachable) orelse unreachable;
-        const count = if (tree.data) |d| std.math.min(bytes.len, d.len) else 0;
+        const count = if (tree.data) |d| @min(bytes.len, d.len) else 0;
         const data = if (tree.data) |d| d[0..count] else "";
         std.mem.copy(u8, bytes, data);
         return count;

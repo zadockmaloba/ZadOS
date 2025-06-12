@@ -57,7 +57,14 @@ pub const FreeListAllocator = struct {
     }
 
     pub fn allocator(self: *Self) Allocator {
-        return Allocator.init(self, alloc, resize, free);
+        _ = self;
+        return Allocator{
+            .vtable = &.{
+                .alloc = alloc,
+                .resize = resize,
+                .free = free,
+            },
+        };
     }
 
     ///
@@ -105,7 +112,7 @@ pub const FreeListAllocator = struct {
     fn free(self: *Self, mem: []u8, alignment: u29, ret_addr: usize) void {
         _ = alignment;
         _ = ret_addr;
-        const size = std.math.max(mem.len, @sizeOf(Header));
+        const size = @max(mem.len, @sizeOf(Header));
         const addr = @intFromPtr(mem.ptr);
         var header = insertFreeHeader(addr, size - @sizeOf(Header), null);
         if (self.first_free) |first| {
@@ -324,7 +331,7 @@ pub const FreeListAllocator = struct {
 
         // Get the real size being allocated, which is the aligned size or the size of a header (whichever is largest)
         // The size must be at least the size of a header so that it can be freed properly
-        const real_size = std.math.max(if (size_alignment > 1) std.mem.alignAllocLen(size, size, size_alignment) else size, @sizeOf(Header));
+        const real_size = @max(if (size_alignment > 1) std.mem.alignAllocLen(size, size, size_alignment) else size, @sizeOf(Header));
 
         var free_header = self.first_free;
         var prev: ?*Header = null;
@@ -458,7 +465,7 @@ pub const FreeListAllocator = struct {
         // Should be to the right of the first allocation, with some alignment padding in between
         const alloc0_end = alloc0_addr + alloc0.len;
         try testing.expect(alloc0_end <= alloc1_addr);
-        try testing.expectEqual(std.mem.alignForward(alloc0_end, 4), alloc1_addr);
+        try testing.expectEqual(std.mem.alignForward(usize, alloc0_end, 4), alloc1_addr);
         // It should have produced a node on the right
         header = @as(*Header, @ptrFromInt(alloc1_end));
         try testing.expectEqual(header.size, size - (alloc1_end - start) - @sizeOf(Header));
@@ -497,7 +504,7 @@ pub const FreeListAllocator = struct {
         // Alloc a non aligned to header
         const alloc4 = try free_list.alloc(13, 1, 0, @returnAddress());
         const alloc4_addr = @intFromPtr(alloc4.ptr);
-        const alloc4_end = alloc4_addr + std.mem.alignForward(13, @alignOf(Header));
+        const alloc4_end = alloc4_addr + std.mem.alignForward(comptime_int, 13, @alignOf(Header));
         const header3 = @as(*Header, @ptrFromInt(alloc4_end));
 
         // We should still have a length of 13

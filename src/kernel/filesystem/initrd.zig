@@ -57,13 +57,13 @@ pub const InitrdFS = struct {
 
     /// See vfs.FileSystem.getRootNode
     fn getRootNode(fs: *const vfs.FileSystem) *const vfs.DirNode {
-        var self = @as(InitrdFS, @fieldParentPtr("instance", fs.instance));
+        var self = @as(*InitrdFS, @fieldParentPtr("instance", fs.instance));
         return &self.root_node.Dir;
     }
 
     /// See vfs.FileSystem.close
     fn close(fs: *const vfs.FileSystem, node: *const vfs.Node) void {
-        var self = @as(InitrdFS, @fieldParentPtr("instance", fs.instance));
+        var self = @as(*InitrdFS, @fieldParentPtr("instance", fs.instance));
         // As close can't error, if provided with a invalid Node that isn't opened or try to close
         // the same file twice, will just do nothing.
         if (self.opened_files.remove(node)) {
@@ -73,10 +73,10 @@ pub const InitrdFS = struct {
 
     /// See vfs.FileSystem.read
     fn read(fs: *const vfs.FileSystem, file_node: *const vfs.FileNode, bytes: []u8) (Allocator.Error || vfs.Error)!usize {
-        var self = @as(InitrdFS, @fieldParentPtr("instance", fs.instance));
+        var self = @as(*InitrdFS, @fieldParentPtr("instance", fs.instance));
         const node = @as(*const vfs.Node, @ptrCast(file_node));
         const file_header = self.opened_files.get(node) orelse return vfs.Error.NotOpened;
-        const length = std.math.min(bytes.len, file_header.content.len);
+        const length = @min(bytes.len, file_header.content.len);
         std.mem.copy(u8, bytes, file_header.content[0..length]);
         return length;
     }
@@ -92,7 +92,7 @@ pub const InitrdFS = struct {
 
     /// See vfs.FileSystem.open
     fn open(fs: *const vfs.FileSystem, dir: *const vfs.DirNode, name: []const u8, flags: vfs.OpenFlags, args: vfs.OpenArgs) (Allocator.Error || vfs.Error)!*vfs.Node {
-        var self = @as(InitrdFS, @fieldParentPtr("instance", fs.instance));
+        var self = @as(*InitrdFS, @fieldParentPtr("instance", fs.instance));
         // Suppress unused var warning
         _ = args;
         _ = dir;
@@ -161,7 +161,7 @@ pub const InitrdFS = struct {
         defer log.info("Done\n", .{});
 
         // First @sizeOf(usize) bytes is the number of files
-        const num_of_files = try stream.reader().readIntNative(usize);
+        const num_of_files = try stream.reader().readInt(usize, .little);
         var headers = try allocator.alloc(InitrdHeader, num_of_files);
         errdefer allocator.free(headers);
 
@@ -179,7 +179,7 @@ pub const InitrdFS = struct {
 
         while (i < num_of_files) : (i += 1) {
             // We don't need to store the lengths any more as we have the slice.len
-            const name_len = try stream.reader().readIntNative(usize);
+            const name_len = try stream.reader().readInt(usize, .little);
             if (name_len == 0) {
                 return Error.InvalidRamDisk;
             }
@@ -188,7 +188,7 @@ pub const InitrdFS = struct {
             if ((try stream.reader().readAll(headers[i].name)) != name_len) {
                 return Error.InvalidRamDisk;
             }
-            const content_len = try stream.reader().readIntNative(usize);
+            const content_len = try stream.reader().readInt(usize, .little);
             if (content_len == 0) {
                 return Error.InvalidRamDisk;
             }

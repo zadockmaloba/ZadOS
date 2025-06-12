@@ -17,14 +17,14 @@ const pmm = @import("pmm.zig");
 const Task = task.Task;
 const EntryPoint = task.EntryPoint;
 const Allocator = std.mem.Allocator;
-const TailQueue = std.TailQueue;
+const TailQueue = std.ArrayList;
 
 /// The default stack size of a task. Currently this is set to a page size.
 const STACK_SIZE: u32 = arch.MEMORY_BLOCK_SIZE / @sizeOf(usize);
 
 /// Pointer to the start of the main kernel stack
-extern var KERNEL_STACK_START: []u32;
-extern var KERNEL_STACK_END: []u32;
+extern var KERNEL_STACK_START: [*]u8;
+extern var KERNEL_STACK_END: [*]u8;
 
 /// The current task running
 pub var current_task: *Task = undefined;
@@ -135,7 +135,9 @@ pub fn init(allocator: Allocator, mem_profile: *const mem.MemProfile) Allocator.
     defer log.info("Done\n", .{});
 
     // Init the task list for round robin
-    tasks = TailQueue(*Task){};
+    tasks = TailQueue(*Task).init(allocator);
+    //TODO: Maybe use a lock here?
+    //TODO: Deinit the queue on exit
 
     // Set up the init task to continue execution.
     // The kernel stack will point to the stack section rather than the heap
@@ -143,7 +145,7 @@ pub fn init(allocator: Allocator, mem_profile: *const mem.MemProfile) Allocator.
     errdefer allocator.destroy(current_task);
 
     const kernel_stack_size = @intFromPtr(&KERNEL_STACK_END) - @intFromPtr(&KERNEL_STACK_START);
-    current_task.kernel_stack = @as([*]u32, @ptrFromInt(@intFromPtr(&KERNEL_STACK_START)))[0..kernel_stack_size];
+    current_task.kernel_stack = @as([*]usize, @ptrFromInt(@intFromPtr(&KERNEL_STACK_START)))[0..kernel_stack_size];
     // ESP will be saved on next schedule
 
     // Run the runtime tests here
@@ -386,7 +388,7 @@ fn rt_user_task(allocator: Allocator, mem_profile: *const mem.MemProfile) void {
         for (program_elf.section_headers) |section| {
             if (section.flags & elf.SECTION_ALLOCATABLE != 0) {
                 num_allocatable_sections += 1;
-                size_allocatable_sections += std.mem.alignForward(section.size, vmm.BLOCK_SIZE);
+                size_allocatable_sections += std.mem.alignForward(usize, section.size, vmm.BLOCK_SIZE);
             }
         }
 

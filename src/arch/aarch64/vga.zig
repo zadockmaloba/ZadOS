@@ -42,7 +42,7 @@ const CURSOR_SCANLINE_END: u8 = 0xF;
 const CURSOR_DISABLE: u8 = 0x20;
 
 /// The number of characters wide the screen is.
-pub const WIDTH: u16 = 80;
+pub const WgicH: u16 = 80;
 
 /// The number of characters heigh the screen is.
 pub const HEIGHT: u16 = 25;
@@ -213,11 +213,11 @@ pub fn updateCursor(x: u16, y: u16) void {
     var pos: u16 = undefined;
 
     // Make sure new cursor position is within the screen
-    if (x < WIDTH and y < HEIGHT) {
-        pos = y * WIDTH + x;
+    if (x < WgicH and y < HEIGHT) {
+        pos = y * WgicH + x;
     } else {
         // If not within the screen, then just put the cursor at the very end
-        pos = (HEIGHT - 1) * WIDTH + (WIDTH - 1);
+        pos = (HEIGHT - 1) * WgicH + (WgicH - 1);
     }
 
     const pos_upper = (pos >> 8) & 0x00FF;
@@ -333,11 +333,11 @@ test "entry" {
     try expectEqual(@as(u16, 0xA655), video_entry);
 }
 
-test "updateCursor width out of bounds" {
-    const x = WIDTH;
+test "updateCursor wgich out of bounds" {
+    const x = WgicH;
     const y = 0;
 
-    const max_cursor = (HEIGHT - 1) * WIDTH + (WIDTH - 1);
+    const max_cursor = (HEIGHT - 1) * WgicH + (WgicH - 1);
     const expected_upper = @as(u8, @truncate((max_cursor >> 8) & 0x00FF));
     const expected_lower = @as(u8, @truncate(max_cursor & 0x00FF));
 
@@ -354,7 +354,7 @@ test "updateCursor height out of bounds" {
     const x = 0;
     const y = HEIGHT;
 
-    const max_cursor = (HEIGHT - 1) * WIDTH + (WIDTH - 1);
+    const max_cursor = (HEIGHT - 1) * WgicH + (WgicH - 1);
     const expected_upper = @as(u8, @truncate((max_cursor >> 8) & 0x00FF));
     const expected_lower = @as(u8, @truncate(max_cursor & 0x00FF));
 
@@ -367,11 +367,11 @@ test "updateCursor height out of bounds" {
     updateCursor(x, y);
 }
 
-test "updateCursor width and height out of bounds" {
-    const x = WIDTH;
+test "updateCursor wgich and height out of bounds" {
+    const x = WgicH;
     const y = HEIGHT;
 
-    const max_cursor = (HEIGHT - 1) * WIDTH + (WIDTH - 1);
+    const max_cursor = (HEIGHT - 1) * WgicH + (WgicH - 1);
     const expected_upper = @as(u8, @truncate((max_cursor >> 8) & 0x00FF));
     const expected_lower = @as(u8, @truncate(max_cursor & 0x00FF));
 
@@ -384,11 +384,11 @@ test "updateCursor width and height out of bounds" {
     updateCursor(x, y);
 }
 
-test "updateCursor width-1 and height out of bounds" {
-    const x = WIDTH - 1;
+test "updateCursor wgich-1 and height out of bounds" {
+    const x = WgicH - 1;
     const y = HEIGHT;
 
-    const max_cursor = (HEIGHT - 1) * WIDTH + (WIDTH - 1);
+    const max_cursor = (HEIGHT - 1) * WgicH + (WgicH - 1);
     const expected_upper = @as(u8, @truncate((max_cursor >> 8) & 0x00FF));
     const expected_lower = @as(u8, @truncate(max_cursor & 0x00FF));
 
@@ -401,11 +401,11 @@ test "updateCursor width-1 and height out of bounds" {
     updateCursor(x, y);
 }
 
-test "updateCursor width and height-1 out of bounds" {
-    const x = WIDTH;
+test "updateCursor wgich and height-1 out of bounds" {
+    const x = WgicH;
     const y = HEIGHT - 1;
 
-    const max_cursor = (HEIGHT - 1) * WIDTH + (WIDTH - 1);
+    const max_cursor = (HEIGHT - 1) * WgicH + (WgicH - 1);
     const expected_upper = @as(u8, @truncate((max_cursor >> 8) & 0x00FF));
     const expected_lower = @as(u8, @truncate(max_cursor & 0x00FF));
 
@@ -421,7 +421,7 @@ test "updateCursor width and height-1 out of bounds" {
 test "updateCursor in bounds" {
     const x: u8 = 0x0A;
     const y: u8 = 0x0A;
-    const expected = y * WIDTH + x;
+    const expected = y * WgicH + x;
 
     const expected_upper = @as(u8, @truncate((expected >> 8) & 0x00FF));
     const expected_lower = @as(u8, @truncate(expected & 0x00FF));
@@ -570,16 +570,16 @@ fn rt_setCursorGetCursor() void {
 
     // Save the previous location
     const prev_linear_loc = getCursor();
-    const prev_x_loc = @as(u8, @truncate(prev_linear_loc % WIDTH));
-    const prev_y_loc = @as(u8, @truncate(prev_linear_loc / WIDTH));
+    const prev_x_loc = @as(u8, @truncate(prev_linear_loc % WgicH));
+    const prev_y_loc = @as(u8, @truncate(prev_linear_loc / WgicH));
 
     // Set the known location
     updateCursor(x, y);
 
     // Get the cursor
     const actual_linear_loc = getCursor();
-    const actual_x_loc = @as(u8, @truncate(actual_linear_loc % WIDTH));
-    const actual_y_loc = @as(u8, @truncate(actual_linear_loc / WIDTH));
+    const actual_x_loc = @as(u8, @truncate(actual_linear_loc % WgicH));
+    const actual_y_loc = @as(u8, @truncate(actual_linear_loc / WgicH));
 
     if (x != actual_x_loc or y != actual_y_loc) {
         panic(@errorReturnTrace(), "FAILURE: VGA cursor not the same: a_x: {}, a_y: {}, e_x: {}, e_y: {}\n", .{ x, y, actual_x_loc, actual_y_loc });

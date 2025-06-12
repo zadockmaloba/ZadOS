@@ -7,8 +7,8 @@ const expectError = std.testing.expectError;
 const log = std.log.scoped(.x86_isr);
 const build_options = @import("build_options");
 const syscalls = @import("syscalls.zig");
+const gic = @import("gic.zig");
 const panic = @import("../../kernel/panic.zig").panic;
-const idt = if (is_test) @import("../../../../test/mock/kernel/idt_mock.zig") else @import("idt.zig");
 const arch = if (is_test) @import("../../../../test/mock/kernel/arch_mock.zig") else @import("arch.zig");
 const interrupts = @import("interrupts.zig");
 
@@ -22,7 +22,7 @@ pub const IsrError = error{
 };
 
 /// The type of a ISR handler. A function that takes a interrupt context and returns void.
-const IsrHandler = fn (*arch.CpuState) usize;
+const IsrHandler = *const fn (*arch.CpuState) u32;
 
 /// The number of ISR entries.
 const NUMBER_OF_ENTRIES: u8 = 32;
@@ -141,11 +141,11 @@ var syscall_handler: ?IsrHandler = null;
 ///
 export fn isrHandler(ctx: *arch.CpuState) usize {
     // Get the interrupt number
-    const isr_num = ctx.int_num;
+    const isr_num = ctx.elr;
 
     var ret_esp = @intFromPtr(ctx);
 
-    if (isValidIsr(isr_num)) {
+    if (isValidIsr(@intCast(isr_num))) {
         if (isr_num == syscalls.INTERRUPT) {
             // A syscall, so use the syscall handler
             if (syscall_handler) |handler| {
@@ -159,7 +159,7 @@ export fn isrHandler(ctx: *arch.CpuState) usize {
                 ret_esp = handler(ctx);
             } else {
                 log.info("State: {X}\n", .{ctx});
-                panic(@errorReturnTrace(), "ISR {s} ({}) triggered with error code 0x{X} but not registered\n", .{ exception_msg[isr_num], isr_num, ctx.error_code });
+                panic(@errorReturnTrace(), "ISR {s} ({}) triggered with error code 0x{X} but not registered\n", .{ exception_msg[isr_num], isr_num, 0xDEADBEEF });
             }
         }
     } else {
@@ -169,15 +169,15 @@ export fn isrHandler(ctx: *arch.CpuState) usize {
 }
 
 ///
-/// Open an IDT entry with index and handler. This will also handle the errors.
+/// Open an gic entry with index and handler. This will also handle the errors.
 ///
 /// Arguments:
-///     IN index: u8                     - The IDT interrupt number.
-///     IN handler: idt.InterruptHandler - The IDT handler.
+///     IN index: u8                     - The gic interrupt number.
+///     IN handler: gic.InterruptHandler - The gic handler.
 ///
-fn openIsr(index: u8, handler: idt.InterruptHandler) void {
-    idt.openInterruptGate(index, handler) catch |err| switch (err) {
-        error.IdtEntryExists => {
+fn openIsr(index: u8, handler: gic.InterruptHandler) void {
+    gic.openInterruptGate(index, handler) catch |err| switch (err) {
+        error.gicEntryExists => {
             panic(@errorReturnTrace(), "Error opening ISR number: {} exists\n", .{index});
         },
     };
@@ -234,7 +234,7 @@ pub fn registerIsr(isr_num: u16, handler: IsrHandler) IsrError!void {
 }
 
 ///
-/// Initialise the exception and opening up all the IDT interrupt gates for each exception.
+/// Initialise the exception and opening up all the gic interrupt gates for each exception.
 ///
 pub fn init() void {
     log.info("Init\n", .{});
@@ -276,14 +276,14 @@ fn testFunction4(ctx: *arch.CpuState) u32 {
 }
 
 test "openIsr" {
-    idt.initTest();
-    defer idt.freeTest();
+    gic.initTest();
+    defer gic.freeTest();
 
     const index: u8 = 0;
     const handler = testFunction0;
-    const ret: idt.IdtError!void = {};
+    const ret: gic.gicError!void = {};
 
-    idt.addTestParams("openInterruptGate", .{ index, handler, ret });
+    gic.addTestParams("openInterruptGate", .{ index, handler, ret });
 
     openIsr(index, handler);
 }
@@ -339,7 +339,7 @@ test "registerIsr re-register isr handler" {
     try expectError(IsrError.IsrExists, registerIsr(0, testFunction2));
 
     // Post testing
-    for (isr_handlers, 0) |h, i| {
+    for (isr_handlers, 0..) |h, i| {
         if (i != 0) {
             try expect(null == h);
         } else {
@@ -361,7 +361,7 @@ test "registerIsr register isr handler" {
     try registerIsr(0, testFunction1);
 
     // Post testing
-    for (isr_handlers, 0) |h, i| {
+    for (isr_handlers, 0..) |h, i| {
         if (i != 0) {
             try expect(null == h);
         } else {
@@ -382,7 +382,7 @@ test "registerIsr invalid isr index" {
 ///
 fn rt_unregisteredHandlers() void {
     // Ensure all ISR are not registered yet
-    for (isr_handlers, 0) |h, i| {
+    for (isr_handlers, 0..) |h, i| {
         if (h) |_| {
             panic(@errorReturnTrace(), "FAILURE: Handler found for ISR: {}-{}\n", .{ i, h });
         }
@@ -396,21 +396,21 @@ fn rt_unregisteredHandlers() void {
 }
 
 ///
-/// Test that all IDT entries for the ISRs are open.
+/// Test that all gic entries for the ISRs are open.
 ///
-fn rt_openedIdtEntries() void {
-    const loaded_idt = arch.sidt();
-    const idt_entries = @as([*]idt.IdtEntry, @ptrFromInt(loaded_idt.base))[0..idt.NUMBER_OF_ENTRIES];
+fn rt_openedgicEntries() void {
+    const loaded_gic = arch.sgic();
+    const gic_entries = @as([*]gic.gicEntry, @ptrFromInt(loaded_gic.base))[0..gic.NUMBER_OF_ENTRIES];
 
-    for (idt_entries, 0) |entry, i| {
+    for (gic_entries, 0..) |entry, i| {
         if (isValidIsr(i)) {
-            if (!idt.isIdtOpen(entry)) {
-                panic(@errorReturnTrace(), "FAILURE: IDT entry for {} is not open\n", .{i});
+            if (!gic.isgicOpen(entry)) {
+                panic(@errorReturnTrace(), "FAILURE: gic entry for {} is not open\n", .{i});
             }
         }
     }
 
-    log.info("Tested opened IDT entries\n", .{});
+    log.info("Tested opened gic entries\n", .{});
 }
 
 ///
@@ -418,5 +418,5 @@ fn rt_openedIdtEntries() void {
 ///
 pub fn runtimeTests() void {
     rt_unregisteredHandlers();
-    rt_openedIdtEntries();
+    rt_openedgicEntries();
 }

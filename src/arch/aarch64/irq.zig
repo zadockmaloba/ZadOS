@@ -7,9 +7,8 @@ const expectError = std.testing.expectError;
 const log = std.log.scoped(.x86_irq);
 const build_options = @import("build_options");
 const panic = @import("../../kernel/panic.zig").panic;
-const idt = if (is_test) @import("../../../../test/mock/kernel/idt_mock.zig") else @import("idt.zig");
 const arch = if (is_test) @import("../../../../test/mock/kernel/arch_mock.zig") else @import("arch.zig");
-const pic = if (is_test) @import("../../../../test/mock/kernel/pic_mock.zig") else @import("pic.zig");
+const gic = if (is_test) @import("../../../../test/mock/kernel/pic_mock.zig") else @import("gic.zig");
 const interrupts = @import("interrupts.zig");
 
 /// The error set for the IRQ. This will be from installing a IRQ handler.
@@ -54,10 +53,10 @@ export fn irqHandler(ctx: *arch.CpuState) usize {
         const irq_num = @as(u8, @truncate(irq_offset));
         if (irq_handlers[irq_num]) |handler| {
             // Make sure it isn't a spurious irq
-            if (!pic.spuriousIrq(irq_num)) {
+            if (!gic.spuriousIrq(irq_num)) {
                 ret_esp = handler(ctx);
                 // Send the end of interrupt command
-                pic.sendEndOfInterrupt(irq_num);
+                gic.sendEndOfInterrupt(irq_num);
             }
         } else {
             panic(@errorReturnTrace(), "IRQ not registered: {}", .{irq_num});
@@ -69,15 +68,15 @@ export fn irqHandler(ctx: *arch.CpuState) usize {
 }
 
 ///
-/// Open an IDT entry with index and handler. This will also handle the errors.
+/// Open an gic entry with index and handler. This will also handle the errors.
 ///
 /// Arguments:
-///     IN index: u8                     - The IDT interrupt number.
-///     IN handler: idt.InterruptHandler - The IDT handler.
+///     IN index: u8                     - The gic interrupt number.
+///     IN handler: gic.InterruptHandler - The gic handler.
 ///
-fn openIrq(index: u8, handler: idt.InterruptHandler) void {
-    idt.openInterruptGate(index, handler) catch |err| switch (err) {
-        error.IdtEntryExists => {
+fn openIrq(index: u8, handler: gic.InterruptHandler) void {
+    gic.openInterruptGate(index, handler) catch |err| switch (err) {
+        error.gicEntryExists => {
             panic(@errorReturnTrace(), "Error opening IRQ number: {} exists", .{index});
         },
     };
@@ -98,7 +97,7 @@ pub fn isValidIrq(irq_num: u32) bool {
 
 ///
 /// Register a IRQ by setting its interrupt handler to the given function. This will also clear the
-/// mask bit in the PIC so interrupts can happen for this IRQ.
+/// mask bit in the gic so interrupts can happen for this IRQ.
 ///
 /// Arguments:
 ///     IN irq_num: u8         - The IRQ number to register.
@@ -116,9 +115,9 @@ pub fn registerIrq(irq_num: u8, handler: IrqHandler) IrqError!void {
         if (irq_handlers[irq_num]) |_| {
             return IrqError.IrqExists;
         } else {
-            // Register the handler and clear the PIC mask so interrupts can happen.
+            // Register the handler and clear the gic mask so interrupts can happen.
             irq_handlers[irq_num] = handler;
-            pic.clearMask(irq_num);
+            gic.clearMask(irq_num);
         }
     } else {
         return IrqError.InvalidIrq;
@@ -127,7 +126,7 @@ pub fn registerIrq(irq_num: u8, handler: IrqHandler) IrqError!void {
 
 ///
 /// Initialise the IRQ interrupts by first remapping the port addresses and then opening up all
-/// the IDT interrupt gates for each IRQ.
+/// the gic interrupt gates for each IRQ.
 ///
 pub fn init() void {
     log.info("Init\n", .{});
@@ -159,14 +158,14 @@ fn testFunction2(ctx: *arch.CpuState) u32 {
 }
 
 test "openIrq" {
-    idt.initTest();
-    defer idt.freeTest();
+    gic.initTest();
+    defer gic.freeTest();
 
     const index: u8 = 0;
     const handler = testFunction0;
-    const ret: idt.IdtError!void = {};
+    const ret: gic.gicError!void = {};
 
-    idt.addTestParams("openInterruptGate", .{ index, handler, ret });
+    gic.addTestParams("openInterruptGate", .{ index, handler, ret });
 
     openIrq(index, handler);
 }
@@ -182,10 +181,10 @@ test "isValidIrq" {
 
 test "registerIrq re-register irq handler" {
     // Set up
-    pic.initTest();
-    defer pic.freeTest();
+    gic.initTest();
+    defer gic.freeTest();
 
-    pic.addTestParams("clearMask", .{@as(u16, 0)});
+    gic.addTestParams("clearMask", .{@as(u16, 0)});
 
     // Pre testing
     for (irq_handlers) |h| {
@@ -197,7 +196,7 @@ test "registerIrq re-register irq handler" {
     try expectError(IrqError.IrqExists, registerIrq(0, testFunction2));
 
     // Post testing
-    for (irq_handlers, 0) |h, i| {
+    for (irq_handlers, 0..) |h, i| {
         if (i != 0) {
             try expect(null == h);
         } else {
@@ -211,10 +210,10 @@ test "registerIrq re-register irq handler" {
 
 test "registerIrq register irq handler" {
     // Set up
-    pic.initTest();
-    defer pic.freeTest();
+    gic.initTest();
+    defer gic.freeTest();
 
-    pic.addTestParams("clearMask", .{@as(u16, 0)});
+    gic.addTestParams("clearMask", .{@as(u16, 0)});
 
     // Pre testing
     for (irq_handlers) |h| {
@@ -225,7 +224,7 @@ test "registerIrq register irq handler" {
     try registerIrq(0, testFunction1);
 
     // Post testing
-    for (irq_handlers, 0) |h, i| {
+    for (irq_handlers, 0..) |h, i| {
         if (i != 0) {
             try expect(null == h);
         } else {
@@ -246,7 +245,7 @@ test "registerIrq invalid irq index" {
 ///
 fn rt_unregisteredHandlers() void {
     // Ensure all ISR are not registered yet
-    for (irq_handlers, 0) |h, i| {
+    for (irq_handlers, 0..) |h, i| {
         if (h) |_| {
             panic(@errorReturnTrace(), "FAILURE: Handler found for IRQ: {}-{}\n", .{ i, h });
         }
@@ -256,21 +255,21 @@ fn rt_unregisteredHandlers() void {
 }
 
 ///
-/// Test that all IDT entries for the IRQs are open.
+/// Test that all gic entries for the IRQs are open.
 ///
-fn rt_openedIdtEntries() void {
-    const loaded_idt = arch.sidt();
-    const idt_entries = @as([*]idt.IdtEntry, @ptrFromInt(loaded_idt.base))[0..idt.NUMBER_OF_ENTRIES];
+fn rt_openedgicEntries() void {
+    const loaded_gic = arch.sgic();
+    const gic_entries = @as([*]gic.gicEntry, @ptrFromInt(loaded_gic.base))[0..gic.NUMBER_OF_ENTRIES];
 
-    for (idt_entries, 0) |entry, i| {
+    for (gic_entries, 0..) |entry, i| {
         if (i >= IRQ_OFFSET and isValidIrq(i - IRQ_OFFSET)) {
-            if (!idt.isIdtOpen(entry)) {
-                panic(@errorReturnTrace(), "FAILURE: IDT entry for {} is not open\n", .{i});
+            if (!gic.isgicOpen(entry)) {
+                panic(@errorReturnTrace(), "FAILURE: gic entry for {} is not open\n", .{i});
             }
         }
     }
 
-    log.info("Tested opened IDT entries\n", .{});
+    log.info("Tested opened gic entries\n", .{});
 }
 
 ///
@@ -278,5 +277,5 @@ fn rt_openedIdtEntries() void {
 ///
 pub fn runtimeTests() void {
     rt_unregisteredHandlers();
-    rt_openedIdtEntries();
+    rt_openedgicEntries();
 }

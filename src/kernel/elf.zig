@@ -419,7 +419,7 @@ pub const Elf = struct {
         var section_data = try allocator.alloc(?[]const u8, header.section_header_entries);
         errdefer allocator.free(section_data);
         var sec_offset = header.section_header_offset;
-        for (section_headers, 0) |*section, i| {
+        for (section_headers, 0..) |*section, i| {
             section.* = std.mem.bytesToValue(SectionHeader, (elf_data.ptr + sec_offset)[0..@sizeOf(SectionHeader)]);
             section_data[i] = if (section.section_type.hasData()) elf_data[section.offset .. section.offset + section.size] else null;
             sec_offset += header.section_header_entry_size;
@@ -594,7 +594,7 @@ test "init" {
 
     try testing.expectEqual(@as(usize, 2), elf.section_data.len);
     try testing.expectEqual(elf.section_headers[0].size, elf.section_data[0].?.len);
-    for ("some_section" ++ [_]u8{0} ++ "strings" ++ [_]u8{0}, 0) |char, i| {
+    for ("some_section" ++ [_]u8{0} ++ "strings" ++ [_]u8{0}, 0..) |char, i| {
         try testing.expectEqual(char, elf.section_data[1].?[i]);
     }
 

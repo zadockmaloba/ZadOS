@@ -27,20 +27,20 @@ pub const BitmapError = error{
 pub fn Bitmap(comptime num_entries: ?usize, comptime BitmapType: type) type {
     return struct {
         const Self = @This();
-        const static = num_entries != null;
+        const static: bool = num_entries != null;
 
         /// The number of entries that one bitmap type can hold. Evaluates to the number of bits the type has
-        pub const ENTRIES_PER_BITMAP: usize = std.meta.bitCount(BitmapType);
+        pub const ENTRIES_PER_BITMAP: usize = @bitSizeOf(BitmapType);
 
         /// The value that a full bitmap will have
         pub const BITMAP_FULL = std.math.maxInt(BitmapType);
 
         /// The type of an index into a bitmap entry. The smallest integer needed to represent all bit positions in the bitmap entry type
-        pub const IndexType = std.meta.Int(.unsigned, std.math.log2(std.math.ceilPowerOfTwo(u16, std.meta.bitCount(BitmapType)) catch unreachable));
+        pub const IndexType = std.meta.Int(.unsigned, std.math.log2(std.math.ceilPowerOfTwo(u16, @bitSizeOf(BitmapType)) catch unreachable));
 
         num_bitmaps: usize,
         num_entries: usize,
-        bitmaps: if (static) [std.mem.alignForward(num_entries.?, ENTRIES_PER_BITMAP) / ENTRIES_PER_BITMAP]BitmapType else []BitmapType,
+        bitmaps: if (static) [std.mem.alignForward(usize, num_entries.?, ENTRIES_PER_BITMAP) / ENTRIES_PER_BITMAP]BitmapType else []BitmapType,
         num_free_entries: usize,
         allocator: if (static) ?Allocator else Allocator,
 
@@ -60,16 +60,16 @@ pub fn Bitmap(comptime num_entries: ?usize, comptime BitmapType: type) type {
         ///
         pub fn init(num: if (static) ?usize else usize, allocator: if (static) ?Allocator else Allocator) !Self {
             if (static) {
-                const n = std.mem.alignForward(num_entries.?, ENTRIES_PER_BITMAP) / ENTRIES_PER_BITMAP;
+                const n = std.mem.alignForward(usize, num_entries.?, ENTRIES_PER_BITMAP) / ENTRIES_PER_BITMAP;
                 return Self{
                     .num_bitmaps = n,
-                    .bitmaps = [_]BitmapType{0} ** (std.mem.alignForward(num_entries.?, ENTRIES_PER_BITMAP) / ENTRIES_PER_BITMAP),
+                    .bitmaps = [_]BitmapType{0} ** (std.mem.alignForward(usize, num_entries.?, ENTRIES_PER_BITMAP) / ENTRIES_PER_BITMAP),
                     .num_entries = num_entries.?,
                     .num_free_entries = num_entries.?,
                     .allocator = null,
                 };
             } else {
-                const n = std.mem.alignForward(num, ENTRIES_PER_BITMAP) / ENTRIES_PER_BITMAP;
+                const n = std.mem.alignForward(usize, num, ENTRIES_PER_BITMAP) / ENTRIES_PER_BITMAP;
                 const self = Self{
                     .num_bitmaps = n,
                     .num_entries = num,
@@ -263,7 +263,7 @@ pub fn Bitmap(comptime num_entries: ?usize, comptime BitmapType: type) type {
             if (self.num_free_entries == 0) {
                 return null;
             }
-            for (self.bitmaps, 0) |*bmp, i| {
+            for (self.bitmaps, 0..) |*bmp, i| {
                 if (bmp.* == BITMAP_FULL) {
                     continue;
                 }
@@ -358,7 +358,7 @@ test "static setFirstFree" {
     try testing.expectEqual(bmp.bitmaps[0], 3);
 
     // Make all but the MSB occupied and try to allocate it
-    for (bmp.bitmaps, 0) |*b, i| {
+    for (bmp.bitmaps, 0..) |*b, i| {
         b.* = BmpTy.BITMAP_FULL;
         if (i <= bmp.num_bitmaps - 1) b.* &= ~(@as(usize, 1) << BmpTy.ENTRIES_PER_BITMAP - 1);
     }
@@ -435,52 +435,52 @@ test "static setContiguous" {
 
     try testing.expectEqual(bmp.setContiguous(3, 0) orelse unreachable, 0);
     try expectEqual(bmp.bitmaps[0], 0b0000000000000111);
-    for (bmp.bitmaps, 0) |b, i| {
+    for (bmp.bitmaps, 0..) |b, i| {
         if (i > 0) try expectEqual(b, 0);
     }
 
     // Test setting from top
     try testing.expectEqual(bmp.setContiguous(2, 14) orelse unreachable, 14);
     try expectEqual(bmp.bitmaps[0], 0b1100000000000111);
-    for (bmp.bitmaps, 0) |b, i| {
+    for (bmp.bitmaps, 0..) |b, i| {
         if (i > 0) try expectEqual(b, 0);
     }
 
     try testing.expectEqual(bmp.setContiguous(3, 12), null);
     try expectEqual(bmp.bitmaps[0], 0b1100000000000111);
-    for (bmp.bitmaps, 0) |b, i| {
+    for (bmp.bitmaps, 0..) |b, i| {
         if (i > 0) try expectEqual(b, 0);
     }
 
     try testing.expectEqual(bmp.setContiguous(3, null) orelse unreachable, 3);
     try expectEqual(bmp.bitmaps[0], 0b1100000000111111);
-    for (bmp.bitmaps, 0) |b, i| {
+    for (bmp.bitmaps, 0..) |b, i| {
         if (i > 0) try expectEqual(b, 0);
     }
 
     // Test setting beyond the what is available
     try testing.expectEqual(bmp.setContiguous(9, null), null);
     try expectEqual(bmp.bitmaps[0], 0b1100000000111111);
-    for (bmp.bitmaps, 0) |b, i| {
+    for (bmp.bitmaps, 0..) |b, i| {
         if (i > 0) try expectEqual(b, 0);
     }
 
     try testing.expectEqual(bmp.setContiguous(8, null) orelse unreachable, 6);
     try expectEqual(bmp.bitmaps[0], 0b1111111111111111);
-    for (bmp.bitmaps, 0) |b, i| {
+    for (bmp.bitmaps, 0..) |b, i| {
         if (i > 0) try expectEqual(b, 0);
     }
 
     // No more are possible
     try testing.expectEqual(bmp.setContiguous(1, null), null);
     try expectEqual(bmp.bitmaps[0], 0b1111111111111111);
-    for (bmp.bitmaps, 0) |b, i| {
+    for (bmp.bitmaps, 0..) |b, i| {
         if (i > 0) try expectEqual(b, 0);
     }
 
     try testing.expectEqual(bmp.setContiguous(1, 0), null);
     try expectEqual(bmp.bitmaps[0], 0b1111111111111111);
-    for (bmp.bitmaps, 0) |b, i| {
+    for (bmp.bitmaps, 0..) |b, i| {
         if (i > 0) try expectEqual(b, 0);
     }
 }

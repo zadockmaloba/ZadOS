@@ -46,7 +46,7 @@ pub const MapperError = error{
 ///
 /// Returns a container that can map and unmap virtual memory to physical memory.
 /// The mapper can pass some payload data when mapping an unmapping, which is of type `Payload`. This can be anything that the underlying mapper needs to carry out the mapping process.
-/// For x86, it would be the page directory that is being mapped within. An architecture or other mapper can specify the data it needs when mapping by specifying this type.
+/// For ARM64, it would be the page table that is being mapped within.
 ///
 /// Arguments:
 ///     IN comptime Payload: type - The type of the VMM-specific payload to pass when mapping and unmapping
@@ -55,9 +55,27 @@ pub const MapperError = error{
 ///     The Mapper type constructed.
 ///
 pub fn Mapper(comptime Payload: type) type {
+    const MapFnType = *const fn (
+        virtual_start: usize,
+        virtual_end: usize,
+        physical_start: usize,
+        physical_end: usize,
+        attrs: Attributes,
+        allocator: Allocator,
+        spec: Payload,
+    ) (Allocator.Error || MapperError)!void;
+
+    const UnmapFnType = *const fn (
+        virtual_start: usize,
+        virtual_end: usize,
+        allocator: Allocator,
+        spec: Payload,
+    ) MapperError!void;
+
     return struct {
         ///
-        /// Map a region (can span more than one block) of virtual memory to physical memory. After a call to this function, the memory should be present the next time it is accessed.
+        /// Map a region (can span more than one block) of virtual memory to physical memory.
+        /// After a call to this function, the memory should be present the next time it is accessed.
         /// The attributes given must be obeyed when possible.
         ///
         /// Arguments:
@@ -72,10 +90,11 @@ pub fn Mapper(comptime Payload: type) type {
         /// Error: AllocatorError || MapperError
         ///     The causes depend on the mapper used
         ///
-        mapFn: fn (virtual_start: usize, virtual_end: usize, physical_start: usize, physical_end: usize, attrs: Attributes, allocator: Allocator, spec: Payload) (Allocator.Error || MapperError)!void,
+        mapFn: MapFnType,
 
         ///
-        /// Unmap a region (can span more than one block) of virtual memory from its physical memory. After a call to this function, the memory should not be accessible without error.
+        /// Unmap a region (can span more than one block) of virtual memory from its physical memory.
+        /// After a call to this function, the memory should not be accessible without error.
         ///
         /// Arguments:
         ///     IN virtual_start: usize - The start of the virtual region to unmap
@@ -86,7 +105,7 @@ pub fn Mapper(comptime Payload: type) type {
         /// Error: MapperError
         ///     The causes depend on the mapper used
         ///
-        unmapFn: fn (virtual_start: usize, virtual_end: usize, allocator: Allocator, spec: Payload) MapperError!void,
+        unmapFn: UnmapFnType,
     };
 }
 
@@ -173,7 +192,7 @@ pub fn VirtualMemoryManager(comptime Payload: type) type {
         ///
         pub fn init(start: usize, end: usize, allocator: Allocator, mapper: Mapper(Payload), payload: Payload) Allocator.Error!Self {
             const size = end - start;
-            const bmp = try bitmap.Bitmap(null, usize).init(std.mem.alignForward(size, pmm.BLOCK_SIZE) / pmm.BLOCK_SIZE, allocator);
+            const bmp = try bitmap.Bitmap(null, usize).init(std.mem.alignForward(usize, size, pmm.BLOCK_SIZE) / pmm.BLOCK_SIZE, allocator);
             return Self{
                 .bmp = bmp,
                 .start = start,
@@ -281,7 +300,7 @@ pub fn VirtualMemoryManager(comptime Payload: type) type {
                 const vaddr = entry.key_ptr.*;
                 const allocation = entry.value_ptr.*;
 
-                for (allocation.physical.items, 0) |block, i| {
+                for (allocation.physical.items, 0..) |block, i| {
                     if (block <= phys and block + BLOCK_SIZE > phys) {
                         const block_addr = vaddr + i * BLOCK_SIZE;
                         const block_offset = phys % BLOCK_SIZE;
@@ -447,8 +466,8 @@ pub fn VirtualMemoryManager(comptime Payload: type) type {
             if (data.len == 0) {
                 return;
             }
-            const start_addr = std.mem.alignBackward(address, BLOCK_SIZE);
-            const end_addr = std.mem.alignForward(address + data.len, BLOCK_SIZE);
+            const start_addr = std.mem.alignBackward(usize, address, BLOCK_SIZE);
+            const end_addr = std.mem.alignForward(usize, address + data.len, BLOCK_SIZE);
 
             if (end_addr >= other.end or start_addr < other.start)
                 return bitmap.BitmapError.OutOfBounds;
@@ -467,14 +486,14 @@ pub fn VirtualMemoryManager(comptime Payload: type) type {
                 }
             }
             // Make sure the address is actually mapped in the destination VMM
-            if (blocks.items.len != std.mem.alignForward(data.len, BLOCK_SIZE) / BLOCK_SIZE) {
+            if (blocks.items.len != std.mem.alignForward(usize, data.len, BLOCK_SIZE) / BLOCK_SIZE) {
                 return VmmError.NotAllocated;
             }
 
             // Map them into self for some vaddr so they can be accessed from this VMM
             if (self.bmp.setContiguous(blocks.items.len, null)) |entry| {
                 const v_start = entry * BLOCK_SIZE + self.start;
-                for (blocks.items, 0) |block, i| {
+                for (blocks.items, 0..) |block, i| {
                     const v = v_start + i * BLOCK_SIZE;
                     const v_end = v + BLOCK_SIZE;
                     const p = block;
@@ -523,7 +542,7 @@ pub fn VirtualMemoryManager(comptime Payload: type) type {
                 const physical = allocation.physical;
                 defer physical.deinit();
                 const num_physical_allocations = physical.items.len;
-                for (physical.items, 0) |block, i| {
+                for (physical.items, 0..) |block, i| {
                     // Clear the address space entry and free the physical memory
                     try self.bmp.clearEntry(entry + i);
                     pmm.free(block) catch |e| {
@@ -567,13 +586,13 @@ pub fn init(mem_profile: *const mem.MemProfile, allocator: Allocator) Allocator.
     // Map all the reserved virtual addresses.
     for (mem_profile.virtual_reserved) |entry| {
         const virtual = mem.Range{
-            .start = std.mem.alignBackward(entry.virtual.start, BLOCK_SIZE),
-            .end = std.mem.alignForward(entry.virtual.end, BLOCK_SIZE),
+            .start = std.mem.alignBackward(usize, entry.virtual.start, BLOCK_SIZE),
+            .end = std.mem.alignForward(usize, entry.virtual.end, BLOCK_SIZE),
         };
         const physical: ?mem.Range = if (entry.physical) |phys|
             mem.Range{
-                .start = std.mem.alignBackward(phys.start, BLOCK_SIZE),
-                .end = std.mem.alignForward(phys.end, BLOCK_SIZE),
+                .start = std.mem.alignBackward(usize, phys.start, BLOCK_SIZE),
+                .end = std.mem.alignForward(usize, phys.end, BLOCK_SIZE),
             }
         else
             null;
@@ -789,7 +808,7 @@ test "copy" {
     try std.testing.expectEqual(vmm.allocations.count(), mirrored.allocations.count());
     var it = vmm.allocations.iterator();
     while (it.next()) |next| {
-        for (mirrored.allocations.get(next.key_ptr.*).?.physical.items, 0) |block, i| {
+        for (mirrored.allocations.get(next.key_ptr.*).?.physical.items, 0..) |block, i| {
             try std.testing.expectEqual(block, vmm.allocations.get(next.key_ptr.*).?.physical.items[i]);
         }
     }
@@ -864,7 +883,7 @@ test "copyDaya to" {
 }
 
 var test_allocations: ?*bitmap.Bitmap(null, u64) = null;
-var test_mapper = Mapper(arch.VmmPayload){ .mapFn = testMap, .unmapFn = testUnmap };
+var test_mapper = Mapper(arch.VmmPayload){ .mapFn = &testMap, .unmapFn = &testUnmap };
 
 ///
 /// Initialise a virtual memory manager used for testing
@@ -987,8 +1006,8 @@ pub fn runtimeTests(comptime Payload: type, vmm: *VirtualMemoryManager(Payload),
 ///     IN mem_profile: *const mem.MemProfile - The mem profile with details about all the memory regions that should be reserved
 ///
 fn rt_correctMapping(comptime Payload: type, vmm: *VirtualMemoryManager(Payload), mem_profile: *const mem.MemProfile) void {
-    const v_start = std.mem.alignBackward(@intFromPtr(mem_profile.vaddr_start), BLOCK_SIZE);
-    const v_end = std.mem.alignForward(@intFromPtr(mem_profile.vaddr_end), BLOCK_SIZE);
+    const v_start = std.mem.alignBackward(usize, @intFromPtr(mem_profile.vaddr_start), BLOCK_SIZE);
+    const v_end = std.mem.alignForward(usize, @intFromPtr(mem_profile.vaddr_end), BLOCK_SIZE);
 
     var vaddr = vmm.start;
     while (vaddr < vmm.end - BLOCK_SIZE) : (vaddr += BLOCK_SIZE) {
@@ -998,7 +1017,7 @@ fn rt_correctMapping(comptime Payload: type, vmm: *VirtualMemoryManager(Payload)
             should_be_set = true;
         } else {
             for (mem_profile.virtual_reserved) |entry| {
-                if (vaddr >= std.mem.alignBackward(entry.virtual.start, BLOCK_SIZE) and vaddr < std.mem.alignForward(entry.virtual.end, BLOCK_SIZE)) {
+                if (vaddr >= std.mem.alignBackward(usize, entry.virtual.start, BLOCK_SIZE) and vaddr < std.mem.alignForward(usize, entry.virtual.end, BLOCK_SIZE)) {
                     if (entry.physical) |phys| {
                         const expected_phys = phys.start + (vaddr - entry.virtual.start);
                         if (vmm.virtToPhys(vaddr) catch unreachable != expected_phys) {

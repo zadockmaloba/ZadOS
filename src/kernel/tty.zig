@@ -11,11 +11,11 @@ const Writer = std.io.Writer(void, anyerror, printCallback);
 
 pub const TTY = struct {
     /// Print a already-formatted string
-    print: fn ([]const u8) anyerror!void,
+    print: *const fn ([]const u8) anyerror!void,
     /// Set the TTY cursor position to a row and column
-    setCursor: fn (u8, u8) void,
+    setCursor: *const fn (u8, u8) void,
     /// Clear the screen and set the cursor to top left. The default implementation will be used if null
-    clear: ?fn () void,
+    clear: ?*const fn () void,
     /// The number of character rows supported
     rows: u8,
     /// The number of character columns supported

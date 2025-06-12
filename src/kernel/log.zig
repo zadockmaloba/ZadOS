@@ -1,17 +1,14 @@
 const std = @import("std");
 const fmt = std.fmt;
-const build_options = @import("build_options");
-const Serial = @import("serial.zig").Serial;
+//const build_options = @import("build_options");
 const scheduler = @import("scheduler.zig");
+const uart = @import("../arch/aarch64/uart.zig");
 
 /// The errors that can occur when logging
 const LoggingError = error{};
 
 /// The Writer for the format function
 const Writer = std.io.Writer(void, LoggingError, logCallback);
-
-/// The serial object where the logs will be written to. This will be a COM serial port.
-var serial: Serial = undefined;
 
 ///
 /// The call back function for the std library format function.
@@ -30,7 +27,9 @@ var serial: Serial = undefined;
 fn logCallback(context: void, str: []const u8) LoggingError!usize {
     // Suppress unused var warning
     _ = context;
-    serial.writeBytes(str);
+    uart.print(str) catch {
+        @panic("Unable to write to UART\n");
+    };
     return str.len;
 }
 
@@ -56,13 +55,11 @@ pub fn log(comptime level: std.log.Level, comptime format: []const u8, args: any
 /// Arguments:
 ///     IN ser: Serial - The serial instance to use when logging
 ///
-pub fn init(ser: Serial) void {
-    serial = ser;
-
-    switch (build_options.test_mode) {
-        .Initialisation => runtimeTests(),
-        else => {},
-    }
+pub fn init() void {
+    //switch (build_options.test_mode) {
+    //    .Initialisation => runtimeTests(),
+    //    else => {},
+    //}
 }
 
 ///

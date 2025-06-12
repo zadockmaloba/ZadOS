@@ -1,4 +1,6 @@
 const std = @import("std");
+const rt = @import("test/runtime_test.zig");
+const TestMode = rt.TestMode;
 
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
@@ -40,6 +42,12 @@ pub fn build(b: *std.Build) void {
         .name = "ZadOS",
         .root_module = exe_mod,
     });
+
+    const test_mode = b.option(TestMode, "test-mode", "Run a specific runtime test. This option is for the rt-test step. Available options: ") orelse .None;
+
+    const exe_options = b.addOptions();
+    exe_options.addOption(TestMode, "test_mode", test_mode);
+    exe_mod.addOptions("build_options", exe_options);
 
     // Add assembly file
     exe.addAssemblyFile(b.path("src/arch/aarch64/start.S"));

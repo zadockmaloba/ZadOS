@@ -179,3 +179,13 @@ pub fn printf(comptime format: []const u8, args: anytype) Error!void {
     simple_print(str);
     return uart0.writeString(format);
 }
+
+pub fn setCursor(_: u8, _: u8) void {
+    // Not implemented for UART, as it is a simple output device
+    // Cursor management is typically handled by terminal emulators
+}
+
+pub fn clear() void {
+    // Not implemented for UART, as it is a simple output device
+    // Cursor management is typically handled by terminal emulators
+}

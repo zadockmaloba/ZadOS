@@ -18,7 +18,7 @@ const multiboot = @import("multiboot.zig");
 const Allocator = std.mem.Allocator;
 
 /// An array of directory entries and page tables. Forms the first level of paging and covers the entire 4GB memory space.
-pub const Directory = packed struct {
+pub const Directory = struct {
     /// The directory entries.
     entries: [ENTRIES_PER_DIRECTORY]DirectoryEntry,
 
@@ -40,10 +40,12 @@ pub const Directory = packed struct {
 };
 
 /// An array of table entries. Forms the second level of paging and covers a 4MB memory space.
-const Table = packed struct {
+const Table = struct {
     /// The table entries.
     entries: [ENTRIES_PER_TABLE]TableEntry,
 };
+
+pub const PageTable = Directory;
 
 /// An entry within a directory. References a single page table.
 /// Bit 0: Present. Set if present in physical memory.
@@ -220,11 +222,11 @@ fn mapDirEntry(dir: *Directory, virt_start: usize, virt_end: usize, phys_start: 
     } else {
         // Create a table and put the physical address in the dir entry
         table = &(try allocator.alignedAlloc(Table, @as(u29, @truncate(PAGE_SIZE_4KB)), 1))[0];
-        @memset(@as([*]u8, @ptrCast(table)), 0);
+        table.entries = [_]TableEntry{0} ** ENTRIES_PER_TABLE;
         const table_phys_addr = if (builtin.is_test) @intFromPtr(table) else vmm.kernel_vmm.virtToPhys(@intFromPtr(table)) catch |e| {
             panic(@errorReturnTrace(), "Failed getting the physical address for a page table: {}\n", .{e});
         };
-        dir_entry.* |= DENTRY_PAGE_ADDR & table_phys_addr;
+        dir_entry.* |= DENTRY_PAGE_ADDR & @as(u32, @intCast(table_phys_addr));
         dir.tables[entry] = table;
     }
 
@@ -338,7 +340,7 @@ fn mapTableEntry(dir: *const Directory, entry: *align(1) TableEntry, virt_addr: 
     }
 
     clearAttribute(entry, TENTRY_GLOBAL);
-    setAttribute(entry, TENTRY_PAGE_ADDR & phys_addr);
+    setAttribute(entry, TENTRY_PAGE_ADDR & @as(u32, @intCast(phys_addr)));
     if (dir == &kernel_directory) {
         asm volatile ("invlpg (%[addr])"
             :
@@ -370,14 +372,14 @@ fn mapTableEntry(dir: *const Directory, entry: *align(1) TableEntry, virt_addr: 
 pub fn map(virtual_start: usize, virtual_end: usize, phys_start: usize, phys_end: usize, attrs: vmm.Attributes, allocator: Allocator, dir: *Directory) (Allocator.Error || vmm.MapperError)!void {
     var virt_addr = virtual_start;
     var phys_addr = phys_start;
-    var virt_next = std.math.min(virtual_end, std.mem.alignBackward(virt_addr, PAGE_SIZE_4MB) + PAGE_SIZE_4MB);
-    var phys_next = std.math.min(phys_end, std.mem.alignBackward(phys_addr, PAGE_SIZE_4MB) + PAGE_SIZE_4MB);
+    var virt_next = @min(virtual_end, std.mem.alignBackward(usize, virt_addr, PAGE_SIZE_4MB) + PAGE_SIZE_4MB);
+    var phys_next = @min(phys_end, std.mem.alignBackward(usize, phys_addr, PAGE_SIZE_4MB) + PAGE_SIZE_4MB);
     var entry_idx = virtToDirEntryIdx(virt_addr);
     while (entry_idx < ENTRIES_PER_DIRECTORY and virt_addr < virtual_end) : ({
         virt_addr = virt_next;
         phys_addr = phys_next;
-        virt_next = std.math.min(virtual_end, virt_next + PAGE_SIZE_4MB);
-        phys_next = std.math.min(phys_end, phys_next + PAGE_SIZE_4MB);
+        virt_next = @min(virtual_end, virt_next + PAGE_SIZE_4MB);
+        phys_next = @min(phys_end, phys_next + PAGE_SIZE_4MB);
         entry_idx += 1;
     }) {
         try mapDirEntry(dir, virt_addr, virt_next, phys_addr, phys_next, attrs, allocator);
@@ -397,11 +399,11 @@ pub fn map(virtual_start: usize, virtual_end: usize, phys_start: usize, phys_end
 ///
 pub fn unmap(virtual_start: usize, virtual_end: usize, allocator: Allocator, dir: *Directory) vmm.MapperError!void {
     var virt_addr = virtual_start;
-    var virt_next = std.math.min(virtual_end, std.mem.alignBackward(virt_addr, PAGE_SIZE_4MB) + PAGE_SIZE_4MB);
+    var virt_next = @min(virtual_end, std.mem.alignBackward(usize, virt_addr, PAGE_SIZE_4MB) + PAGE_SIZE_4MB);
     var entry_idx = virtToDirEntryIdx(virt_addr);
     while (entry_idx < ENTRIES_PER_DIRECTORY and virt_addr < virtual_end) : ({
         virt_addr = virt_next;
-        virt_next = std.math.min(virtual_end, virt_next + PAGE_SIZE_4MB);
+        virt_next = @min(virtual_end, virt_next + PAGE_SIZE_4MB);
         entry_idx += 1;
     }) {
         try unmapDirEntry(dir, virt_addr, virt_next, allocator);
@@ -465,7 +467,7 @@ pub fn init(mem_profile: *const MemProfile) void {
         :
         : [addr] "{eax}" (dir_physaddr),
     );
-    const v_end = std.mem.alignForward(@intFromPtr(mem_profile.vaddr_end), PAGE_SIZE_4KB);
+    const v_end = std.mem.alignForward(usize, @intFromPtr(mem_profile.vaddr_end), PAGE_SIZE_4KB);
     switch (build_options.test_mode) {
         .Initialisation => runtimeTests(v_end),
         else => {},

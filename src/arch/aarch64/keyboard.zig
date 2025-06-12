@@ -5,7 +5,7 @@ const Allocator = std.mem.Allocator;
 const testing = std.testing;
 const log = std.log.scoped(.x86_keyboard);
 const irq = @import("irq.zig");
-const pic = @import("pic.zig");
+const gic = @import("gic.zig");
 const arch = if (builtin.is_test) @import("../../../../test/mock/kernel/arch_mock.zig") else @import("arch.zig");
 const panic = @import("../../kernel/panic.zig").panic;
 const kb = @import("../../kernel/keyboard.zig");
@@ -183,7 +183,7 @@ fn onKeyEvent(ctx: *arch.CpuState) usize {
 ///     OutOfMemory - There isn't enough memory to allocate the keyboard instance
 ///
 pub fn init(allocator: Allocator) Allocator.Error!*Keyboard {
-    irq.registerIrq(pic.IRQ_KEYBOARD, onKeyEvent) catch |e| {
+    irq.registerIrq(gic.IRQ_KEYBOARD, onKeyEvent) catch |e| {
         panic(@errorReturnTrace(), "Failed to register keyboard IRQ: {}\n", .{e});
     };
     keyboard = try allocator.create(Keyboard);
@@ -337,7 +337,7 @@ test "parseScanCode" {
         KeyPosition.SPECIAL,
     };
     const simple_special_codes = &[_]u8{ 72, 75, 77, 80, 82, 71, 73, 83, 79, 81, 53, 28, 56, 91 };
-    for (simple_special_keys, 0) |key, i| {
+    for (simple_special_keys, 0..) |key, i| {
         try testing.expectEqual(parseScanCode(128), null);
         try testing.expectEqual(pressed_keys, 0);
         try testing.expectEqual(on_print_screen, false);

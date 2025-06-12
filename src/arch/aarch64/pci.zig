@@ -51,15 +51,15 @@ const PciRegisters = enum(u8) {
     MaxLatency = 0x3F,
 
     ///
-    /// Get the type the represents the width of the register. This can be either u8, u16 or u32.
+    /// Get the type the represents the wgich of the register. This can be either u8, u16 or u32.
     ///
     /// Argument:
-    ///     IN comptime pci_reg: PciRegisters - The register to get the width for.
+    ///     IN comptime pci_reg: PciRegisters - The register to get the wgich for.
     ///
     /// Return: type
-    ///     The width type.
+    ///     The wgich type.
     ///
-    pub fn getWidth(comptime pci_reg: PciRegisters) type {
+    pub fn getWgich(comptime pci_reg: PciRegisters) type {
         return switch (pci_reg) {
             .RevisionId, .ProgrammingInterface, .Subclass, .ClassCode, .CacheLineSize, .LatencyTimer, .HeaderType, .BIST, .InterruptLine, .InterruptPin, .MinGrant, .MaxLatency, .CapabilitiesPtr => u8,
             .VenderId, .DeviceId, .Command, .Status, .SubsystemVenderId, .SubsystemId => u16,
@@ -118,11 +118,11 @@ const PciDevice = struct {
     ///     IN function: u3                   - The function.
     ///     IN comptime pci_reg: PciRegisters - The register.
     ///
-    /// Return: PciRegisters.getWidth()
+    /// Return: PciRegisters.getWgich()
     ///     Depending on the register, the type of the return value maybe u8, u16 or u32. See
-    ///     PciRegisters.getWidth().
+    ///     PciRegisters.getWgich().
     ///
-    pub fn configReadData(self: Self, function: u3, comptime pci_reg: PciRegisters) pci_reg.getWidth() {
+    pub fn configReadData(self: Self, function: u3, comptime pci_reg: PciRegisters) pci_reg.getWgich() {
         const address = self.getAddress(function, pci_reg);
         // Last 2 bits of offset must be zero
         // This is because we are requesting a integer (4 bytes) and cannot request a
@@ -132,13 +132,13 @@ const PciDevice = struct {
         // Read the data
         const result = arch.in(u32, CONFIG_DATA);
         // Return the size the user wants
-        const shift = switch (pci_reg.getWidth()) {
+        const shift = switch (pci_reg.getWgich()) {
             u8 => (@intCast(u5, address.register_offset & 0x3)) * 8,
             u16 => (@intCast(u5, address.register_offset & 0x2)) * 8,
             u32 => 0,
             else => @compileError("Invalid read size. Only u8, u16 and u32 allowed."),
         };
-        return @truncate(pci_reg.getWidth(), (result >> shift));
+        return @truncate(pci_reg.getWgich(), (result >> shift));
     }
 
     test "configReadData u8" {
@@ -147,7 +147,7 @@ const PciDevice = struct {
 
         // The bus, device and function values can be any value as we are testing the shifting and masking
         // Have chosen bus = 0, device = 1 and function = 2.
-        // We only change the register as they will have different but widths.
+        // We only change the register as they will have different but wgichs.
 
         {
             const device = PciDevice{
@@ -158,7 +158,7 @@ const PciDevice = struct {
             arch.addTestParams("out", .{ CONFIG_ADDRESS, @bitCast(u32, device.getAddress(2, .RevisionId)) & 0xFFFFFFFC });
             arch.addTestParams("in", .{ CONFIG_DATA, @as(u32, 0xABCDEF12) });
 
-            // RevisionId is a u8 width, offset 0
+            // RevisionId is a u8 wgich, offset 0
             const res = device.configReadData(2, .RevisionId);
             try expectEqual(res, 0x12);
         }
@@ -172,7 +172,7 @@ const PciDevice = struct {
             arch.addTestParams("out", .{ CONFIG_ADDRESS, @bitCast(u32, device.getAddress(2, .ProgrammingInterface)) & 0xFFFFFFFC });
             arch.addTestParams("in", .{ CONFIG_DATA, @as(u32, 0xABCDEF12) });
 
-            // ProgrammingInterface is a u8 width, offset 8
+            // ProgrammingInterface is a u8 wgich, offset 8
             const res = device.configReadData(2, .ProgrammingInterface);
             try expectEqual(res, 0xEF);
         }
@@ -186,7 +186,7 @@ const PciDevice = struct {
             arch.addTestParams("out", .{ CONFIG_ADDRESS, @bitCast(u32, device.getAddress(2, .Subclass)) & 0xFFFFFFFC });
             arch.addTestParams("in", .{ CONFIG_DATA, @as(u32, 0xABCDEF12) });
 
-            // Subclass is a u8 width, offset 16
+            // Subclass is a u8 wgich, offset 16
             const res = device.configReadData(2, .Subclass);
             try expectEqual(res, 0xCD);
         }
@@ -200,7 +200,7 @@ const PciDevice = struct {
             arch.addTestParams("out", .{ CONFIG_ADDRESS, @bitCast(u32, device.getAddress(2, .ClassCode)) & 0xFFFFFFFC });
             arch.addTestParams("in", .{ CONFIG_DATA, @as(u32, 0xABCDEF12) });
 
-            // ClassCode is a u8 width, offset 24
+            // ClassCode is a u8 wgich, offset 24
             const res = device.configReadData(2, .ClassCode);
             try expectEqual(res, 0xAB);
         }
@@ -212,7 +212,7 @@ const PciDevice = struct {
 
         // The bus, device and function values can be any value as we are testing the shifting and masking
         // Have chosen bus = 0, device = 1 and function = 2.
-        // We only change the register as they will have different but widths.
+        // We only change the register as they will have different but wgichs.
 
         {
             const device = PciDevice{
@@ -223,7 +223,7 @@ const PciDevice = struct {
             arch.addTestParams("out", .{ CONFIG_ADDRESS, @bitCast(u32, device.getAddress(2, .VenderId)) & 0xFFFFFFFC });
             arch.addTestParams("in", .{ CONFIG_DATA, @as(u32, 0xABCDEF12) });
 
-            // VenderId is a u16 width, offset 0
+            // VenderId is a u16 wgich, offset 0
             const res = device.configReadData(2, .VenderId);
             try expectEqual(res, 0xEF12);
         }
@@ -237,7 +237,7 @@ const PciDevice = struct {
             arch.addTestParams("out", .{ CONFIG_ADDRESS, @bitCast(u32, device.getAddress(2, .DeviceId)) & 0xFFFFFFFC });
             arch.addTestParams("in", .{ CONFIG_DATA, @as(u32, 0xABCDEF12) });
 
-            // DeviceId is a u16 width, offset 16
+            // DeviceId is a u16 wgich, offset 16
             const res = device.configReadData(2, .DeviceId);
             try expectEqual(res, 0xABCD);
         }
@@ -249,7 +249,7 @@ const PciDevice = struct {
 
         // The bus, device and function values can be any value as we are testing the shifting and masking
         // Have chosen bus = 0, device = 1 and function = 2.
-        // We only change the register as they will have different but widths.
+        // We only change the register as they will have different but wgichs.
 
         {
             const device = PciDevice{
@@ -260,7 +260,7 @@ const PciDevice = struct {
             arch.addTestParams("out", .{ CONFIG_ADDRESS, @bitCast(u32, device.getAddress(2, .BaseAddr0)) & 0xFFFFFFFC });
             arch.addTestParams("in", .{ CONFIG_DATA, @as(u32, 0xABCDEF12) });
 
-            // BaseAddr0 is a u32 width, offset 0
+            // BaseAddr0 is a u32 wgich, offset 0
             const res = device.configReadData(2, .BaseAddr0);
             try expectEqual(res, 0xABCDEF12);
         }

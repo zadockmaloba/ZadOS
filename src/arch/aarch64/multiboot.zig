@@ -61,7 +61,7 @@ pub const struct_multiboot_header = extern struct {
     bss_end_addr: multiboot_uint32_t,
     entry_addr: multiboot_uint32_t,
     mode_type: multiboot_uint32_t,
-    width: multiboot_uint32_t,
+    wgich: multiboot_uint32_t,
     height: multiboot_uint32_t,
     depth: multiboot_uint32_t,
 };
@@ -123,7 +123,7 @@ pub const struct_multiboot_info = extern struct {
     vbe_interface_len: multiboot_uint16_t,
     framebuffer_addr: multiboot_uint64_t,
     framebuffer_pitch: multiboot_uint32_t,
-    framebuffer_width: multiboot_uint32_t,
+    framebuffer_wgich: multiboot_uint32_t,
     framebuffer_height: multiboot_uint32_t,
     framebuffer_bpp: multiboot_uint8_t,
     framebuffer_type: multiboot_uint8_t,
@@ -237,36 +237,36 @@ pub const __UINTMAX_FMTo__ = "lo";
 pub const __UINTMAX_FMTu__ = "lu";
 pub const __UINTMAX_FMTx__ = "lx";
 pub const __UINTMAX_FMTX__ = "lX";
-pub const __INTMAX_WIDTH__ = @as(c_int, 64);
+pub const __INTMAX_WgicH__ = @as(c_int, 64);
 pub const __PTRDIFF_TYPE__ = c_long;
 pub const __PTRDIFF_FMTd__ = "ld";
 pub const __PTRDIFF_FMTi__ = "li";
-pub const __PTRDIFF_WIDTH__ = @as(c_int, 64);
+pub const __PTRDIFF_WgicH__ = @as(c_int, 64);
 pub const __INTPTR_TYPE__ = c_long;
 pub const __INTPTR_FMTd__ = "ld";
 pub const __INTPTR_FMTi__ = "li";
-pub const __INTPTR_WIDTH__ = @as(c_int, 64);
+pub const __INTPTR_WgicH__ = @as(c_int, 64);
 pub const __SIZE_TYPE__ = c_ulong;
 pub const __SIZE_FMTo__ = "lo";
 pub const __SIZE_FMTu__ = "lu";
 pub const __SIZE_FMTx__ = "lx";
 pub const __SIZE_FMTX__ = "lX";
-pub const __SIZE_WIDTH__ = @as(c_int, 64);
+pub const __SIZE_WgicH__ = @as(c_int, 64);
 pub const __WCHAR_TYPE__ = c_int;
-pub const __WCHAR_WIDTH__ = @as(c_int, 32);
+pub const __WCHAR_WgicH__ = @as(c_int, 32);
 pub const __WINT_TYPE__ = c_uint;
-pub const __WINT_WIDTH__ = @as(c_int, 32);
-pub const __SIG_ATOMIC_WIDTH__ = @as(c_int, 32);
+pub const __WINT_WgicH__ = @as(c_int, 32);
+pub const __SIG_ATOMIC_WgicH__ = @as(c_int, 32);
 pub const __SIG_ATOMIC_MAX__ = @import("std").zig.c_translation.promoteIntLiteral(c_int, 2147483647, .decimal);
 pub const __CHAR16_TYPE__ = c_ushort;
 pub const __CHAR32_TYPE__ = c_uint;
-pub const __UINTMAX_WIDTH__ = @as(c_int, 64);
+pub const __UINTMAX_WgicH__ = @as(c_int, 64);
 pub const __UINTPTR_TYPE__ = c_ulong;
 pub const __UINTPTR_FMTo__ = "lo";
 pub const __UINTPTR_FMTu__ = "lu";
 pub const __UINTPTR_FMTx__ = "lx";
 pub const __UINTPTR_FMTX__ = "lX";
-pub const __UINTPTR_WIDTH__ = @as(c_int, 64);
+pub const __UINTPTR_WgicH__ = @as(c_int, 64);
 pub const __FLT_DENORM_MIN__ = @as(f32, 1.40129846e-45);
 pub const __FLT_HAS_DENORM__ = @as(c_int, 1);
 pub const __FLT_DIG__ = @as(c_int, 6);
@@ -309,7 +309,7 @@ pub const __LDBL_MAX__ = @as(c_longdouble, 1.18973149535723176502e+4932);
 pub const __LDBL_MIN_10_EXP__ = -@as(c_int, 4931);
 pub const __LDBL_MIN_EXP__ = -@as(c_int, 16381);
 pub const __LDBL_MIN__ = @as(c_longdouble, 3.36210314311209350626e-4932);
-pub const __POINTER_WIDTH__ = @as(c_int, 64);
+pub const __POINTER_WgicH__ = @as(c_int, 64);
 pub const __BIGGEST_ALIGNMENT__ = @as(c_int, 16);
 pub const __WINT_UNSIGNED__ = @as(c_int, 1);
 pub const __INT8_TYPE__ = i8;

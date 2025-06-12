@@ -808,7 +808,7 @@ pub fn Fat32FS(comptime StreamType: type) type {
                     const sector = self.fat_config.clusterToSector(self.cluster);
                     try self.stream.seekableStream().seekTo(sector * self.fat_config.bytes_per_sector + self.cluster_offset);
 
-                    const read_len = std.math.min(buff.len, self.fat_config.bytes_per_sector * self.fat_config.sectors_per_cluster);
+                    const read_len = @min(buff.len, self.fat_config.bytes_per_sector * self.fat_config.sectors_per_cluster);
                     self.cluster_offset += read_len;
 
                     // Read the cluster
@@ -1178,7 +1178,7 @@ pub fn Fat32FS(comptime StreamType: type) type {
             const self = @fieldParentPtr(Fat32Self, "instance", fs.instance);
             const cast_node = @ptrCast(*const vfs.Node, node);
             const opened_node = self.opened_files.get(cast_node) orelse return vfs.Error.NotOpened;
-            const size = std.math.min(buffer.len, opened_node.size);
+            const size = @min(buffer.len, opened_node.size);
 
             var it = ClusterChainIterator.init(self.allocator, self.fat_config, opened_node.cluster, self.stream) catch |e| switch (e) {
                 error.OutOfMemory => return error.OutOfMemory,
@@ -1221,7 +1221,7 @@ pub fn Fat32FS(comptime StreamType: type) type {
                 }
                 while (write_index < bytes.len) : ({
                     write_index = to_write;
-                    to_write = std.math.min(bytes.len, write_index + self.fat_config.sectors_per_cluster * self.fat_config.bytes_per_sector);
+                    to_write = @min(bytes.len, write_index + self.fat_config.sectors_per_cluster * self.fat_config.bytes_per_sector);
                     if (write_index < bytes.len) {
                         next_free_cluster = self.findNextFreeCluster(next_free_cluster, next_free_cluster) catch return vfs.Error.Unexpected;
                     }
@@ -2026,11 +2026,11 @@ pub fn Fat32FS(comptime StreamType: type) type {
             // Fill the cluster with the entry
             var cluster_offset = index;
             var write_index: u32 = 0;
-            var write_next_index = std.math.min(cluster_size - cluster_offset, write_buff.len);
+            var write_next_index = @min(cluster_size - cluster_offset, write_buff.len);
             while (write_index < write_buff.len) : ({
                 cluster_offset = 0;
                 write_index = write_next_index;
-                write_next_index = std.math.min(write_next_index + cluster_size, write_buff.len);
+                write_next_index = @min(write_next_index + cluster_size, write_buff.len);
                 if (write_index < write_buff.len) {
                     write_cluster = try self.findNextFreeCluster(write_cluster, write_cluster);
                 }

@@ -75,8 +75,8 @@ pub var ADDR_OFFSET: usize = undefined;
 pub fn virtToPhys(virt: anytype) @TypeOf(virt) {
     const T = @TypeOf(virt);
     return switch (@typeInfo(T)) {
-        .Pointer => @as(T, @ptrFromInt(@intFromPtr(virt) - ADDR_OFFSET)),
-        .Int => virt - ADDR_OFFSET,
+        .pointer => @as(T, @ptrFromInt(@intFromPtr(virt) - ADDR_OFFSET)),
+        .int => virt - ADDR_OFFSET,
         else => @compileError("Only pointers and integers are supported"),
     };
 }
@@ -93,8 +93,8 @@ pub fn virtToPhys(virt: anytype) @TypeOf(virt) {
 pub fn physToVirt(phys: anytype) @TypeOf(phys) {
     const T = @TypeOf(phys);
     return switch (@typeInfo(T)) {
-        .Pointer => @as(T, @ptrFromInt(@intFromPtr(phys) + ADDR_OFFSET)),
-        .Int => phys + ADDR_OFFSET,
+        .pointer => @as(T, @ptrFromInt(@intFromPtr(phys) + ADDR_OFFSET)),
+        .int => phys + ADDR_OFFSET,
         else => @compileError("Only pointers and integers are supported"),
     };
 }
