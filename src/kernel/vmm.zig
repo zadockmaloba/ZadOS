@@ -598,7 +598,7 @@ pub fn init(mem_profile: *const mem.MemProfile, allocator: Allocator) Allocator.
             null;
         kernel_vmm.set(virtual, physical, .{ .kernel = true, .writable = true, .cachable = true }) catch |e| switch (e) {
             VmmError.AlreadyAllocated => {},
-            else => panic(@errorReturnTrace(), "Failed mapping region in VMM {X}: {}\n", .{ entry, e }),
+            else => panic(@errorReturnTrace(), "Failed mapping region in VMM {any}: {}\n", .{ entry, e }),
         };
     }
 
@@ -1021,7 +1021,7 @@ fn rt_correctMapping(comptime Payload: type, vmm: *VirtualMemoryManager(Payload)
                     if (entry.physical) |phys| {
                         const expected_phys = phys.start + (vaddr - entry.virtual.start);
                         if (vmm.virtToPhys(vaddr) catch unreachable != expected_phys) {
-                            panic(@errorReturnTrace(), "virtToPhys didn't return the correct physical address for 0x{X} (0x{X})\n", .{ vaddr, vmm.virtToPhys(vaddr) });
+                            panic(@errorReturnTrace(), "virtToPhys didn't return the correct physical address for 0x{X} (0x{X})\n", .{ vaddr, try vmm.virtToPhys(vaddr) });
                         }
                         if (vmm.physToVirt(expected_phys) catch unreachable != vaddr) {
                             panic(@errorReturnTrace(), "physToVirt didn't return the correct virtual address for 0x{X} (0x{X})\n", .{ expected_phys, vaddr });
