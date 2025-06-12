@@ -324,14 +324,14 @@ pub const FreeListAllocator = struct {
     /// Error: std.Allocator.Error
     ///     std.Allocator.Error.OutOfMemory - There wasn't enough memory left to fulfill the request
     ///
-    pub fn alloc(self: *Self, size: usize, alignment: u29, size_alignment: u29, ret_addr: usize) Allocator.Error![]u8 {
+    pub fn alloc(self: *Self, size: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
         // Suppress unused var warning
         _ = ret_addr;
-        if (self.first_free == null) return Allocator.Error.OutOfMemory;
+        if (self.first_free == null) return null;
 
         // Get the real size being allocated, which is the aligned size or the size of a header (whichever is largest)
         // The size must be at least the size of a header so that it can be freed properly
-        const real_size = @max(if (size_alignment > 1) std.mem.alignAllocLen(size, size, size_alignment) else size, @sizeOf(Header));
+        const real_size = @max(size, @sizeOf(Header));
 
         var free_header = self.first_free;
         var prev: ?*Header = null;
@@ -350,7 +350,7 @@ pub const FreeListAllocator = struct {
             const addr = @intFromPtr(h);
             var alignment_padding: usize = 0;
 
-            if ((alignment > 1 and !std.mem.isAligned(addr, alignment)) or !std.mem.isAligned(addr, @alignOf(Header))) {
+            if ((alignment > 1 and !std.mem.isAligned(addr, alignment.toByteUnits())) or !std.mem.isAligned(addr, @alignOf(Header).toByteUnits())) {
                 alignment_padding = alignment - (addr % alignment);
                 // If the size can't fit the alignment padding then try the next one
                 if (h.size + @sizeOf(Header) < real_size + alignment_padding) {
@@ -417,10 +417,10 @@ pub const FreeListAllocator = struct {
             }
             self.registerFreeHeader(prev, header.next_free);
 
-            return @as([*]u8, @ptrFromInt(@intFromPtr(header)))[0..std.mem.alignAllocLen(size, size, size_alignment)];
+            return @as([*]u8, @ptrFromInt(@intFromPtr(header)))[0..std.mem.alignAllocLen(size, size, alignment.toByteUnits())];
         }
 
-        return Allocator.Error.OutOfMemory;
+        return null;
     }
 
     test "init" {

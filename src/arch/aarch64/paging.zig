@@ -445,7 +445,7 @@ fn pageFault(state: *arch.CpuState) u32 {
         : [cr4] "=r" (-> u32),
     );
     log.info("CR0: 0x{X}, CR2/address: 0x{X}, CR3: 0x{X}, CR4: 0x{X}, EIP: 0x{X}\n", .{ cr0, cr2, cr3, cr4, state.eip });
-    log.info("State: {X}\n", .{state});
+    log.info("State: {any}\n", .{state});
     @panic("Page fault");
 }
 

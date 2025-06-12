@@ -102,12 +102,12 @@ export fn kernel_main() callconv(.C) void {
 
     syscalls.init(kernel_heap.allocator());
     tty.init(kernel_heap.allocator(), boot_payload);
-    const arch_kb = keyboard.init(fixed_allocator.allocator()) catch |e| {
-        panic_root.panic(@errorReturnTrace(), "Failed to inititalise keyboard: {}\n", .{e});
-    };
-    if (arch_kb) |kb| {
-        keyboard.addKeyboard(kb) catch |e| panic_root.panic(@errorReturnTrace(), "Failed to add architecture keyboard: {}\n", .{e});
-    }
+    //const arch_kb = keyboard.init(fixed_allocator.allocator()) catch |e| {
+    //    panic_root.panic(@errorReturnTrace(), "Failed to inititalise keyboard: {}\n", .{e});
+    //};
+    //if (arch_kb) |kb| {
+    //    keyboard.addKeyboard(kb) catch |e| panic_root.panic(@errorReturnTrace(), "Failed to add architecture keyboard: {}\n", .{e});
+    //}
 
     // Get the ramdisk module
     const rd_module = for (mem_profile.modules) |module| {

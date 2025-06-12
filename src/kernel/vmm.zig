@@ -435,7 +435,7 @@ pub fn VirtualMemoryManager(comptime Payload: type) type {
                         try block_list.append(addr);
                         // The map function failing isn't the caller's responsibility so panic as it shouldn't happen
                         self.mapper.mapFn(vaddr, vaddr + BLOCK_SIZE, addr, addr + BLOCK_SIZE, attrs, self.allocator, self.payload) catch |e| {
-                            panic(@errorReturnTrace(), "Failed to map virtual memory: {X}\n", .{e});
+                            panic(@errorReturnTrace(), "Failed to map virtual memory: {}\n", .{e});
                         };
                         vaddr += BLOCK_SIZE;
                     }
