@@ -350,7 +350,7 @@ pub fn initTask(task: *Task, entry_point: usize, allocator: Allocator, set_up_st
         const kernel_stack_bottom = if (task.kernel) task.kernel_stack.len - 36 else task.kernel_stack.len - 38;
 
         // Set up CPU state at bottom of stack
-        var state = @as(*CpuState, @ptrCast(&stack.*[kernel_stack_bottom]));
+        var state = @as(*CpuState, @ptrFromInt(stack.*[kernel_stack_bottom]));
         state.* = CpuState.empty();
 
         // Set up entry point
