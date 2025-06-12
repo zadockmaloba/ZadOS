@@ -57,12 +57,14 @@ pub const FreeListAllocator = struct {
     }
 
     pub fn allocator(self: *Self) Allocator {
-        _ = self;
+        //_ = self;
         return Allocator{
+            .ptr = self,
             .vtable = &.{
-                .alloc = alloc,
-                .resize = resize,
-                .free = free,
+                .alloc = kernel_alloc,
+                .resize = kernel_resize,
+                .remap = kernel_remap,
+                .free = kernel_free,
             },
         };
     }
@@ -324,7 +326,7 @@ pub const FreeListAllocator = struct {
     /// Error: std.Allocator.Error
     ///     std.Allocator.Error.OutOfMemory - There wasn't enough memory left to fulfill the request
     ///
-    pub fn alloc(self: *Self, size: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
+    pub fn alloc(self: *Self, size: usize, alignment: u29, ret_addr: usize) ?[*]u8 {
         // Suppress unused var warning
         _ = ret_addr;
         if (self.first_free == null) return null;
@@ -350,7 +352,7 @@ pub const FreeListAllocator = struct {
             const addr = @intFromPtr(h);
             var alignment_padding: usize = 0;
 
-            if ((alignment > 1 and !std.mem.isAligned(addr, alignment.toByteUnits())) or !std.mem.isAligned(addr, @alignOf(Header).toByteUnits())) {
+            if ((alignment > 1) and !std.mem.isAligned(addr, alignment) or !std.mem.isAligned(addr, @alignOf(Header))) {
                 alignment_padding = alignment - (addr % alignment);
                 // If the size can't fit the alignment padding then try the next one
                 if (h.size + @sizeOf(Header) < real_size + alignment_padding) {
@@ -417,7 +419,7 @@ pub const FreeListAllocator = struct {
             }
             self.registerFreeHeader(prev, header.next_free);
 
-            return @as([*]u8, @ptrFromInt(@intFromPtr(header)))[0..std.mem.alignAllocLen(size, size, alignment.toByteUnits())];
+            return @as([*]u8, @ptrFromInt(@intFromPtr(header))); //[0..std.mem.alignAllocLen(size, size, alignment)];
         }
 
         return null;
@@ -614,4 +616,51 @@ pub fn init(comptime vmm_payload: type, heap_vmm: *vmm.VirtualMemoryManager(vmm_
     // This free call cannot error as it is guaranteed to have been allocated above
     errdefer heap_vmm.free(heap_start) catch unreachable;
     return try FreeListAllocator.init(heap_start, heap_size);
+}
+
+fn kernel_alloc(
+    a: *anyopaque,
+    len: usize,
+    alignment: std.mem.Alignment,
+    ret_addr: usize,
+) ?[*]u8 {
+    const heap = @as(*FreeListAllocator, @ptrCast(@alignCast(a)));
+    return heap.alloc(len, @intCast(alignment.toByteUnits()), ret_addr);
+}
+
+fn kernel_free(
+    a: *anyopaque,
+    mem: []u8,
+    alignment: std.mem.Alignment,
+    ret_addr: usize,
+) void {
+    const heap = @as(*FreeListAllocator, @ptrCast(@alignCast(a)));
+    heap.free(mem, @intCast(alignment.toByteUnits()), ret_addr);
+}
+
+fn kernel_resize(
+    a: *anyopaque,
+    memory: []u8,
+    alignment: std.mem.Alignment,
+    new_len: usize,
+    ret_addr: usize,
+) bool {
+    const heap = @as(*FreeListAllocator, @ptrCast(@alignCast(a)));
+    return heap.resize(memory, @intCast(alignment.toByteUnits()), new_len, @intCast(alignment.toByteUnits()), ret_addr) != null;
+}
+
+fn kernel_remap(
+    a: *anyopaque,
+    memory: []u8,
+    alignment: std.mem.Alignment,
+    new_len: usize,
+    ret_addr: usize,
+) ?[*]u8 {
+    const heap = @as(*FreeListAllocator, @ptrCast(@alignCast(a)));
+    const resized = heap.resize(memory, @intCast(alignment.toByteUnits()), new_len, @intCast(alignment.toByteUnits()), ret_addr);
+    if (resized) |size| {
+        _ = size;
+        return @as([*]u8, @ptrCast(memory.ptr)); //[0..size];
+    }
+    return null;
 }
