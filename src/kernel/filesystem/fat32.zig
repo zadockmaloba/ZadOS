@@ -344,8 +344,8 @@ const ShortName = struct {
     ///
     pub fn getSFNName(self: *const ShortName) [11]u8 {
         var name: [11]u8 = [_]u8{' '} ** 11;
-        std.mem.copy(u8, name[0..], self.name[0..]);
-        std.mem.copy(u8, name[8..], self.extension[0..]);
+        std.mem.copyBackwards(u8, name[0..], self.name[0..]);
+        std.mem.copyBackwards(u8, name[8..], self.extension[0..]);
         return name;
     }
 
@@ -3076,7 +3076,7 @@ test "EntryIterator.checkRead - inside cluster block" {
     defer cluster_chain.deinit();
 
     var buff: [16]u8 = undefined;
-    std.mem.copy(u8, buff[0..], buff_stream[32..48]);
+    std.mem.copyBackwards(u8, buff[0..], buff_stream[32..48]);
     var it = Fat32FS(@TypeOf(cluster_chain.stream)).EntryIterator{
         .allocator = undefined,
         .cluster_block = buff[0..],
@@ -4071,9 +4071,9 @@ fn testOpenRec(dir_node: *const vfs.DirNode, path: []const u8) anyerror!void {
         if (file.kind == .Directory) {
             var dir_path = try std.testing.allocator.alloc(u8, path.len + file.name.len + 1);
             defer std.testing.allocator.free(dir_path);
-            std.mem.copy(u8, dir_path[0..], path);
+            std.mem.copyBackwards(u8, dir_path[0..], path);
             dir_path[path.len] = '/';
-            std.mem.copy(u8, dir_path[path.len + 1 ..], file.name);
+            std.mem.copyBackwards(u8, dir_path[path.len + 1 ..], file.name);
             const new_dir = &(try dir_node.open(file.name, .NO_CREATION, .{})).Dir;
             defer new_dir.close();
             try testOpenRec(new_dir, dir_path);
@@ -4300,9 +4300,9 @@ fn testReadRec(dir_node: *const vfs.DirNode, path: []const u8, read_big: bool) a
         if (file.kind == .Directory) {
             var dir_path = try std.testing.allocator.alloc(u8, path.len + file.name.len + 1);
             defer std.testing.allocator.free(dir_path);
-            std.mem.copy(u8, dir_path[0..], path);
+            std.mem.copyBackwards(u8, dir_path[0..], path);
             dir_path[path.len] = '/';
-            std.mem.copy(u8, dir_path[path.len + 1 ..], file.name);
+            std.mem.copyBackwards(u8, dir_path[path.len + 1 ..], file.name);
             const new_dir = &(try dir_node.open(file.name, .NO_CREATION, .{})).Dir;
             defer new_dir.close();
             try testReadRec(new_dir, dir_path, read_big);
@@ -5781,9 +5781,9 @@ fn testWriteRec(dir_node: *const vfs.DirNode, path: []const u8) anyerror!void {
         if (file.kind == .Directory) {
             var dir_path = try std.testing.allocator.alloc(u8, path.len + file.name.len + 1);
             defer std.testing.allocator.free(dir_path);
-            std.mem.copy(u8, dir_path[0..], path);
+            std.mem.copyBackwards(u8, dir_path[0..], path);
             dir_path[path.len] = '/';
-            std.mem.copy(u8, dir_path[path.len + 1 ..], file.name);
+            std.mem.copyBackwards(u8, dir_path[path.len + 1 ..], file.name);
             const new_dir = &(try dir_node.open(file.name, .CREATE_DIR, .{})).Dir;
             defer new_dir.close();
             try testWriteRec(new_dir, dir_path);

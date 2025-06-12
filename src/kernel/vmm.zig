@@ -513,9 +513,9 @@ pub fn VirtualMemoryManager(comptime Payload: type) type {
                 const align_offset = address - start_addr;
                 const data_copy = @as([*]u8, @ptrFromInt(v_start + align_offset))[0..data.len];
                 if (from) {
-                    std.mem.copy(u8, data_copy, data);
+                    std.mem.copyBackwards(u8, data_copy, data);
                 } else {
-                    std.mem.copy(u8, data, data_copy);
+                    std.mem.copyBackwards(u8, data, data_copy);
                 }
                 // TODO Unmap and freee virtual blocks from self so they can be used in the future
             } else {

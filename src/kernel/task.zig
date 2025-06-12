@@ -98,10 +98,10 @@ pub const Task = struct {
         const pid = allocatePid();
         errdefer freePid(pid) catch |e| panic(@errorReturnTrace(), "Failed to free task PID in errdefer ({}): {}\n", .{ pid, e });
 
-        var k_stack = if (alloc_kernel_stack) try allocator.alloc(usize, STACK_SIZE) else &[_]usize{};
+        var k_stack: []usize = if (alloc_kernel_stack) try allocator.alloc(usize, STACK_SIZE) else &[_]usize{};
         errdefer if (alloc_kernel_stack) allocator.free(k_stack);
 
-        const u_stack = if (kernel) &[_]usize{} else try allocator.alloc(usize, STACK_SIZE);
+        const u_stack: []usize = if (kernel) &[_]usize{} else try allocator.alloc(usize, STACK_SIZE);
         errdefer if (!kernel) allocator.free(u_stack);
 
         task.* = .{

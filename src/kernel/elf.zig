@@ -455,13 +455,13 @@ pub const Error = error{
 };
 
 fn testSetHeader(data: []u8, header: Header) void {
-    std.mem.copy(u8, data, @as([*]const u8, @ptrCast(&header))[0..@sizeOf(Header)]);
+    std.mem.copyBackwards(u8, data, @as([*]const u8, @ptrCast(&header))[0..@sizeOf(Header)]);
 }
 
 fn testSetSection(data: []u8, header: SectionHeader, idx: usize) void {
     const offset = @sizeOf(Header) + @sizeOf(SectionHeader) * idx;
     const dest = data[offset .. offset + @sizeOf(SectionHeader)];
-    std.mem.copy(u8, dest, @as([*]const u8, @ptrCast(&header))[0..@sizeOf(SectionHeader)]);
+    std.mem.copyBackwards(u8, dest, @as([*]const u8, @ptrCast(&header))[0..@sizeOf(SectionHeader)]);
 }
 
 pub fn testInitData(allocator: std.mem.Allocator, section_name: []const u8, string_section_name: []const u8, file_type: Type, entry_address: usize, flags: u32, section_flags: u32, strings_flags: u32, section_address: usize, strings_address: usize) ![]u8 {
@@ -545,12 +545,12 @@ pub fn testInitData(allocator: std.mem.Allocator, section_name: []const u8, stri
     std.mem.set(u8, data[data_offset .. data_offset + section_size], 0);
     data_offset += section_size;
 
-    std.mem.copy(u8, data[data_offset .. data_offset + section_name.len], section_name);
+    std.mem.copyBackwards(u8, data[data_offset .. data_offset + section_name.len], section_name);
     data_offset += section_name.len;
     data[data_offset] = 0;
     data_offset += 1;
 
-    std.mem.copy(u8, data[data_offset .. data_offset + string_section_name.len], string_section_name);
+    std.mem.copyBackwards(u8, data[data_offset .. data_offset + string_section_name.len], string_section_name);
     data_offset += string_section_name.len;
     data[data_offset] = 0;
     data_offset += 1;

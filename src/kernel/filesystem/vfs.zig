@@ -656,7 +656,7 @@ const TestFS = struct {
         const tree = (getTreeNode(test_fs, node) catch unreachable) orelse unreachable;
         const count = if (tree.data) |d| @min(bytes.len, d.len) else 0;
         const data = if (tree.data) |d| d[0..count] else "";
-        std.mem.copy(u8, bytes, data);
+        std.mem.copyBackwards(u8, bytes, data);
         return count;
     }
 
@@ -667,7 +667,7 @@ const TestFS = struct {
             test_fs.allocator.free(tree.data.?);
         }
         tree.data = try test_fs.allocator.alloc(u8, bytes.len);
-        std.mem.copy(u8, tree.data.?, bytes);
+        std.mem.copyBackwards(u8, tree.data.?, bytes);
         return bytes.len;
     }
 
@@ -709,7 +709,7 @@ const TestFS = struct {
             // Create the test fs tree node
             const child_tree = try test_fs.allocator.create(TreeNode);
             const child_name = try test_fs.allocator.alloc(u8, name.len);
-            std.mem.copy(u8, child_name, name);
+            std.mem.copyBackwards(u8, child_name, name);
             child_tree.* = .{
                 .val = child,
                 .name = child_name,
@@ -733,7 +733,7 @@ pub fn testInitFs(allocator: Allocator) !*TestFS {
     const root_node = try allocator.create(Node);
     root_node.* = .{ .Dir = .{ .fs = fs, .mount = null } };
     const name = try allocator.alloc(u8, 4);
-    std.mem.copy(u8, name, "root");
+    std.mem.copyBackwards(u8, name, "root");
     testfs.* = TestFS{
         .tree = .{
             .val = root_node,
