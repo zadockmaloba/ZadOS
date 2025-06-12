@@ -359,7 +359,7 @@ const ShortName = struct {
     ///     Whether the file is a directory or not.
     ///
     pub fn isDir(self: *const ShortName) bool {
-        return self.attributes & @enumToInt(ShortName.Attributes.Directory) == @enumToInt(ShortName.Attributes.Directory);
+        return self.attributes & @intFromEnum(ShortName.Attributes.Directory) == @intFromEnum(ShortName.Attributes.Directory);
     }
 
     ///
@@ -858,7 +858,7 @@ pub fn Fat32FS(comptime StreamType: type) type {
             ///
             pub fn init(allocator: Allocator, fat_config: FATConfig, cluster: u32, stream: StreamType) (Allocator.Error || Fat32Self.Error || ReadError || SeekError)!ClusterChainIteratorSelf {
                 // Create a bytes per sector sized cache of the FAT.
-                var fat = try allocator.alloc(u32, fat_config.bytes_per_sector / @sizeOf(u32));
+                const fat = try allocator.alloc(u32, fat_config.bytes_per_sector / @sizeOf(u32));
                 errdefer allocator.free(fat);
 
                 const table_offset = cluster / fat.len;
@@ -1103,7 +1103,7 @@ pub fn Fat32FS(comptime StreamType: type) type {
                     } else |e| switch (e) {
                         error.Orphan => continue,
                         error.EndClusterChain => return null,
-                        else => return @errSetCast(Allocator.Error || Fat32Self.Error || ReadError || SeekError || LongName.Error, e),
+                        else => return @as(Allocator.Error || Fat32Self.Error || ReadError || SeekError || LongName.Error, @errorCast(e)),
                     }
                 }
             }
@@ -1158,13 +1158,13 @@ pub fn Fat32FS(comptime StreamType: type) type {
 
         /// See vfs.FileSystem.getRootNode
         fn getRootNode(fs: *const vfs.FileSystem) *const vfs.DirNode {
-            const self = @fieldParentPtr(Fat32Self, "instance", fs.instance);
+            const self = @as(*Fat32Self, @fieldParentPtr("instance", fs.instance));
             return &self.root_node.node.Dir;
         }
 
         /// See vfs.FileSystem.close
         fn close(fs: *const vfs.FileSystem, node: *const vfs.Node) void {
-            const self = @fieldParentPtr(Fat32Self, "instance", fs.instance);
+            const self = @as(*Fat32Self, @fieldParentPtr("instance", fs.instance));
             // As close can't error, if provided with a invalid Node that isn't opened or try to close
             // the same file twice, will just do nothing.
             if (self.opened_files.fetchRemove(node)) |entry_node| {
@@ -1175,8 +1175,8 @@ pub fn Fat32FS(comptime StreamType: type) type {
 
         /// See vfs.FileSystem.read
         fn read(fs: *const vfs.FileSystem, node: *const vfs.FileNode, buffer: []u8) (Allocator.Error || vfs.Error)!usize {
-            const self = @fieldParentPtr(Fat32Self, "instance", fs.instance);
-            const cast_node = @ptrCast(*const vfs.Node, node);
+            const self = @as(*Fat32Self, @fieldParentPtr("instance", fs.instance));
+            const cast_node = @as(*const vfs.Node, @ptrCast(node));
             const opened_node = self.opened_files.get(cast_node) orelse return vfs.Error.NotOpened;
             const size = @min(buffer.len, opened_node.size);
 
@@ -1201,8 +1201,8 @@ pub fn Fat32FS(comptime StreamType: type) type {
 
         /// See vfs.FileSystem.write
         fn write(fs: *const vfs.FileSystem, node: *const vfs.FileNode, bytes: []const u8) (Allocator.Error || vfs.Error)!usize {
-            const self = @fieldParentPtr(Fat32Self, "instance", fs.instance);
-            const cast_node = @ptrCast(*const vfs.Node, node);
+            const self = @as(*Fat32Self, @fieldParentPtr("instance", fs.instance));
+            const cast_node = @as(*const vfs.Node, @ptrCast(node));
             const opened_node = self.opened_files.get(cast_node) orelse return vfs.Error.NotOpened;
             // Short cut if length is less than cluster size, can just write the content directly without modifying the FAT
             if (bytes.len <= self.fat_config.sectors_per_cluster * self.fat_config.bytes_per_sector) {
@@ -1273,7 +1273,7 @@ pub fn Fat32FS(comptime StreamType: type) type {
         ///     vfs.Error.InvalidFlags - Symlinks are not support in FAT32.
         ///
         fn createNode(self: *Fat32Self, cluster: u32, size: u32, entry_cluster: u32, entry_offset: u32, flags: vfs.OpenFlags) (Allocator.Error || vfs.Error)!*vfs.Node {
-            var node = try self.allocator.create(vfs.Node);
+            const node = try self.allocator.create(vfs.Node);
             errdefer self.allocator.destroy(node);
             node.* = switch (flags) {
                 .CREATE_DIR => .{ .Dir = .{ .fs = self.fs, .mount = null } },
@@ -1282,7 +1282,7 @@ pub fn Fat32FS(comptime StreamType: type) type {
             };
 
             // Create the opened info struct
-            var opened_info = try self.allocator.create(OpenedInfo);
+            const opened_info = try self.allocator.create(OpenedInfo);
             errdefer self.allocator.destroy(opened_info);
             opened_info.* = .{
                 .cluster = cluster,
@@ -1310,7 +1310,7 @@ pub fn Fat32FS(comptime StreamType: type) type {
         ///
         fn getDirCluster(self: *const Fat32Self, dir: *const vfs.DirNode) vfs.Error!u32 {
             return if (std.meta.eql(dir, self.fs.getRootNode(self.fs))) self.root_node.cluster else brk: {
-                const parent = self.opened_files.get(@ptrCast(*const vfs.Node, dir)) orelse return vfs.Error.NotOpened;
+                const parent = self.opened_files.get(@as(*const vfs.Node, @ptrCast(dir))) orelse return vfs.Error.NotOpened;
                 // Cluster 0 means is the root directory cluster
                 break :brk if (parent.cluster == 0) self.fat_config.root_directory_cluster else parent.cluster;
             };
@@ -1336,7 +1336,7 @@ pub fn Fat32FS(comptime StreamType: type) type {
         ///                                 the real error is printed using `log.err`.
         ///
         fn openImpl(fs: *const vfs.FileSystem, dir: *const vfs.DirNode, name: []const u8) (Allocator.Error || vfs.Error)!*vfs.Node {
-            const self = @fieldParentPtr(Fat32Self, "instance", fs.instance);
+            const self = @as(*Fat32Self, @fieldParentPtr("instance", fs.instance));
             // TODO: Cache the files in this dir, so when opening, don't have to iterator the directory every time
 
             // Iterate over the directory and find the file/folder
@@ -1363,7 +1363,7 @@ pub fn Fat32FS(comptime StreamType: type) type {
                 }
 
                 // File name compare is case insensitive
-                var match: bool = brk: {
+                const match: bool = brk: {
                     if (entry.long_name) |long_name| {
                         if (std.ascii.eqlIgnoreCase(name, long_name)) {
                             break :brk true;
@@ -1409,7 +1409,7 @@ pub fn Fat32FS(comptime StreamType: type) type {
         ///     Fat32Self.Error.DiskFull - No free clusters.
         ///
         fn findNextFreeCluster(self: *Fat32Self, cluster_hint: u32, parent_cluster: ?u32) (Allocator.Error || WriteError || ReadError || SeekError || Fat32Self.Error)!u32 {
-            var fat_buff = try self.allocator.alloc(u32, self.fat_config.bytes_per_sector / @sizeOf(u32));
+            const fat_buff = try self.allocator.alloc(u32, self.fat_config.bytes_per_sector / @sizeOf(u32));
             defer self.allocator.free(fat_buff);
             var sector_offset = cluster_hint / fat_buff.len;
 
@@ -1504,7 +1504,7 @@ pub fn Fat32FS(comptime StreamType: type) type {
         ///                                 the real error is printed using `log.err`.
         ///
         fn createFileOrDir(fs: *const vfs.FileSystem, dir: *const vfs.DirNode, name: []const u8, is_dir: bool) (Allocator.Error || vfs.Error)!*vfs.Node {
-            const self = @fieldParentPtr(Fat32Self, "instance", fs.instance);
+            const self = @as(*Fat32Self, @fieldParentPtr("instance", fs.instance));
 
             var files_in_dir = ArrayList([11]u8).init(self.allocator);
             defer files_in_dir.deinit();
@@ -1656,7 +1656,7 @@ pub fn Fat32FS(comptime StreamType: type) type {
                 }
 
                 // Valid character
-                try utf16_buff.append(@intCast(u16, code_point));
+                try utf16_buff.append(@as(u16, @intCast(code_point)));
             }
 
             // Remove trailing spaces and dots
@@ -1702,7 +1702,7 @@ pub fn Fat32FS(comptime StreamType: type) type {
                 }
             }
 
-            return @intCast(u8, char);
+            return @as(u8, @intCast(char));
         }
 
         ///
@@ -1743,7 +1743,7 @@ pub fn Fat32FS(comptime StreamType: type) type {
             // Get the last dot in the string
             const last_dot_index = std.mem.lastIndexOf(u16, long_name[long_name_start..], &[_]u16{'.'});
 
-            for (long_name[long_name_start..]) |char, i| {
+            for (long_name[long_name_start..], 0..) |char, i| {
                 // Break when we reach the max of the short name or the last dot
                 if (char == '.') {
                     if (last_dot_index) |index| {
@@ -1887,7 +1887,7 @@ pub fn Fat32FS(comptime StreamType: type) type {
         ///
         fn createLongNameEntry(allocator: Allocator, long_name: []const u16, check_sum: u8) Allocator.Error![]LongName {
             // Calculate the number of long entries (round up). LFN are each 13 characters long
-            const num_lfn_entries = @intCast(u8, (long_name.len + 12) / 13);
+            const num_lfn_entries = @as(u8, @intCast((long_name.len + 12) / 13));
 
             // Create the long entries
             var lfn_array = try allocator.alloc(LongName, num_lfn_entries);
@@ -1905,13 +1905,13 @@ pub fn Fat32FS(comptime StreamType: type) type {
                     var temp: [13]u16 = [_]u16{0xFFFF} ** 13;
                     const long_name_slice = long_name[(entry_index * 13)..];
                     if (long_name_slice.len < 13) {
-                        for (long_name_slice) |char, i| {
+                        for (long_name_slice, 0..) |char, i| {
                             temp[i] = char;
                         }
                         // NULL terminated
                         temp[long_name_slice.len] = 0x0000;
                     } else {
-                        for (temp) |*char, i| {
+                        for (temp, 0..) |*char, i| {
                             char.* = long_name[(entry_index * 13) + i];
                         }
                     }
@@ -1947,21 +1947,21 @@ pub fn Fat32FS(comptime StreamType: type) type {
         fn createShortNameEntry(name: [11]u8, attributes: ShortName.Attributes, cluster: u32) ShortName {
             const date_time = arch.getDateTime();
 
-            const date = @intCast(u16, date_time.day | date_time.month << 5 | (date_time.year - 1980) << 9);
-            const time = @intCast(u16, date_time.second / 2 | date_time.minute << 5 | date_time.hour << 11);
+            const date = @as(u16, @intCast(date_time.day | date_time.month << 5 | (date_time.year - 1980) << 9));
+            const time = @as(u16, @intCast(date_time.second / 2 | date_time.minute << 5 | date_time.hour << 11));
 
             return .{
                 .name = name[0..8].*,
                 .extension = name[8..11].*,
-                .attributes = @enumToInt(attributes),
-                .time_created_tenth = @intCast(u8, (date_time.second % 2) * 100),
+                .attributes = @intFromEnum(attributes),
+                .time_created_tenth = @as(u8, @intCast((date_time.second % 2) * 100)),
                 .time_created = time,
                 .date_created = date,
                 .date_last_access = date,
-                .cluster_high = @truncate(u16, cluster >> 16),
+                .cluster_high = @as(u16, @truncate(cluster >> 16)),
                 .time_last_modification = time,
                 .date_last_modification = date,
-                .cluster_low = @truncate(u16, cluster),
+                .cluster_low = @as(u16, @truncate(cluster)),
                 .size = 0x00000000,
             };
         }
@@ -2018,7 +2018,7 @@ pub fn Fat32FS(comptime StreamType: type) type {
             // TODO: Once FatDirEntry can be a packed struct, then can write as bytes and not convert
             var write_buff = try self.allocator.alloc(u8, entries_size_bytes);
             defer self.allocator.free(write_buff);
-            for (entries.long_entry) |long_entry, i| {
+            for (entries.long_entry, 0..) |long_entry, i| {
                 initBytes(LongName, long_entry, write_buff[(32 * i)..]);
             }
             initBytes(ShortName, entries.short_entry, write_buff[write_buff.len - 32 ..]);
@@ -2280,7 +2280,7 @@ fn testFAT32FS(allocator: Allocator, stream: anytype, fat_config: FATConfig) any
     var test_file_buf = try std.testing.allocator.alloc(u8, 35 * 512);
     defer allocator.free(test_file_buf);
 
-    var temp_stream = &std.io.fixedBufferStream(test_file_buf[0..]);
+    const temp_stream = &std.io.fixedBufferStream(test_file_buf[0..]);
 
     try mkfat32.Fat32.make(.{ .image_size = test_file_buf.len }, temp_stream, true);
 
@@ -2485,7 +2485,7 @@ test "ShortName.getName - Dir" {
         const sfn = ShortName{
             .name = "12345678".*,
             .extension = "   ".*,
-            .attributes = @enumToInt(ShortName.Attributes.Directory),
+            .attributes = @intFromEnum(ShortName.Attributes.Directory),
             .time_created_tenth = 0x00,
             .time_created = 0x0000,
             .date_created = 0x0000,
@@ -2504,7 +2504,7 @@ test "ShortName.getName - Dir" {
         const sfn = ShortName{
             .name = "12345   ".*,
             .extension = "   ".*,
-            .attributes = @enumToInt(ShortName.Attributes.Directory),
+            .attributes = @intFromEnum(ShortName.Attributes.Directory),
             .time_created_tenth = 0x00,
             .time_created = 0x0000,
             .date_created = 0x0000,
@@ -2523,7 +2523,7 @@ test "ShortName.getName - Dir" {
         const sfn = ShortName{
             .name = "\u{05}2345   ".*,
             .extension = "   ".*,
-            .attributes = @enumToInt(ShortName.Attributes.Directory),
+            .attributes = @intFromEnum(ShortName.Attributes.Directory),
             .time_created_tenth = 0x00,
             .time_created = 0x0000,
             .date_created = 0x0000,
@@ -2542,7 +2542,7 @@ test "ShortName.getName - Dir" {
         const sfn = ShortName{
             .name = "12345   ".*,
             .extension = "123".*,
-            .attributes = @enumToInt(ShortName.Attributes.Directory),
+            .attributes = @intFromEnum(ShortName.Attributes.Directory),
             .time_created_tenth = 0x00,
             .time_created = 0x0000,
             .date_created = 0x0000,
@@ -2584,7 +2584,7 @@ test "ShortName.isDir" {
         const sfn = ShortName{
             .name = "12345678".*,
             .extension = "123".*,
-            .attributes = @enumToInt(ShortName.Attributes.Directory),
+            .attributes = @intFromEnum(ShortName.Attributes.Directory),
             .time_created_tenth = 0x00,
             .time_created = 0x0000,
             .date_created = 0x0000,
@@ -2602,7 +2602,7 @@ test "ShortName.isDir" {
         const sfn = ShortName{
             .name = "12345678".*,
             .extension = "123".*,
-            .attributes = @enumToInt(ShortName.Attributes.None),
+            .attributes = @intFromEnum(ShortName.Attributes.None),
             .time_created_tenth = 0x00,
             .time_created = 0x0000,
             .date_created = 0x0000,
@@ -2622,7 +2622,7 @@ test "ShortName.getCluster" {
     const sfn = ShortName{
         .name = "12345678".*,
         .extension = "123".*,
-        .attributes = @enumToInt(ShortName.Attributes.None),
+        .attributes = @intFromEnum(ShortName.Attributes.None),
         .time_created_tenth = 0x00,
         .time_created = 0x0000,
         .date_created = 0x0000,
@@ -2641,7 +2641,7 @@ test "ShortName.calcCheckSum" {
     const sfn = ShortName{
         .name = "12345678".*,
         .extension = "123".*,
-        .attributes = @enumToInt(ShortName.Attributes.None),
+        .attributes = @intFromEnum(ShortName.Attributes.None),
         .time_created_tenth = 0x00,
         .time_created = 0x0000,
         .date_created = 0x0000,
@@ -2674,7 +2674,7 @@ test "ClusterChainIterator.checkRead - Within cluster, within FAT" {
         .cluster_end_marker = undefined,
     };
     var buff_stream = [_]u8{};
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     // First 2 are for other purposed and not needed, the third is the first real FAT entry
     var fat = [_]u32{ 0x0FFFFFFF, 0xFFFFFFF8, 0x0FFFFFFF, 0x00000000 };
     var it = Fat32FS(@TypeOf(stream)).ClusterChainIterator{
@@ -2715,7 +2715,7 @@ test "ClusterChainIterator.checkRead - Multiple clusters, within FAT" {
         .cluster_end_marker = undefined,
     };
     var buff_stream = [_]u8{};
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     // First 2 are for other purposed and not needed, the third is the first real FAT entry
     var fat = [_]u32{ 0x0FFFFFFF, 0xFFFFFFF8, 0x00000003, 0x0FFFFFFF };
     var it = Fat32FS(@TypeOf(stream)).ClusterChainIterator{
@@ -2765,7 +2765,7 @@ test "ClusterChainIterator.checkRead - Multiple clusters, outside FAT" {
         0xFF, 0xFF, 0xFF, 0x0F, 0xFF, 0xFF, 0xFF, 0x0F,
         0xFF, 0xFF, 0xFF, 0x0F, 0xFF, 0xFF, 0xFF, 0x0F,
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     // First 2 are for other purposed and not needed, the third is the first real FAT entry
     var fat = [_]u32{ 0x0FFFFFFF, 0xFFFFFFF8, 0x00000004, 0x0FFFFFFF };
     var expected_fat = [_]u32{ 0x0FFFFFFF, 0x0FFFFFFF, 0x0FFFFFFF, 0x0FFFFFFF };
@@ -2790,7 +2790,7 @@ test "ClusterChainIterator.checkRead - Multiple clusters, outside FAT" {
 }
 
 test "ClusterChainIterator.read - end of buffer" {
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     var it = Fat32FS(@TypeOf(stream)).ClusterChainIterator{
         .allocator = undefined,
         .cluster = undefined,
@@ -2805,7 +2805,7 @@ test "ClusterChainIterator.read - end of buffer" {
 }
 
 test "ClusterChainIterator.read - cluster 0" {
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     var it = Fat32FS(@TypeOf(stream)).ClusterChainIterator{
         .allocator = undefined,
         .cluster = 0,
@@ -2838,7 +2838,7 @@ test "ClusterChainIterator.read - end of cluster chain" {
         .next_free_cluster = undefined,
         .cluster_end_marker = end_cluster,
     };
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     var it = Fat32FS(@TypeOf(stream)).ClusterChainIterator{
         .allocator = undefined,
         .cluster = end_cluster,
@@ -2871,7 +2871,7 @@ test "ClusterChainIterator.read - BadRead" {
         .cluster_end_marker = 0x0FFFFFFF,
     };
     var stream_buff: [1024]u8 = undefined;
-    var stream = &std.io.fixedBufferStream(stream_buff[0..]);
+    const stream = &std.io.fixedBufferStream(stream_buff[0..]);
     var it = Fat32FS(@TypeOf(stream)).ClusterChainIterator{
         .allocator = undefined,
         .cluster = 2,
@@ -2916,7 +2916,7 @@ test "ClusterChainIterator.read - success" {
         'a',  'b',  'c',  'd',  '1',  '2',  '3',  '4',
         'A',  'B',  'C',  'D',  '!',  '"',  '$',  '%',
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     // First 2 are for other purposed and not needed, the third is the first real FAT entry
     var fat = [_]u32{ 0x0FFFFFFF, 0xFFFFFFF8, 0x0FFFFFFF, 0x0FFFFFFF };
     var it = Fat32FS(@TypeOf(stream)).ClusterChainIterator{
@@ -2955,7 +2955,7 @@ test "ClusterChainIterator.init - free on BadRead" {
         .next_free_cluster = undefined,
         .cluster_end_marker = 0x0FFFFFFF,
     };
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     try expectError(error.BadRead, Fat32FS(@TypeOf(stream)).ClusterChainIterator.init(std.testing.allocator, fat_config, 2, stream));
 }
 
@@ -2986,7 +2986,7 @@ test "ClusterChainIterator.init - free on OutOfMemory" {
         'a',  'b',  'c',  'd',  '1',  '2',  '3',  '4',
         'A',  'B',  'C',  'D',  '!',  '"',  '$',  '%',
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     const allocations: usize = 1;
 
     var i: usize = 0;
@@ -3023,7 +3023,7 @@ test "ClusterChainIterator.init - success and good read" {
         'a',  'b',  'c',  'd',  '1',  '2',  '3',  '4',
         'A',  'B',  'C',  'D',  '!',  '"',  '$',  '%',
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var it = try Fat32FS(@TypeOf(stream)).ClusterChainIterator.init(std.testing.allocator, fat_config, 2, stream);
     defer it.deinit();
 
@@ -3071,7 +3071,7 @@ test "EntryIterator.checkRead - inside cluster block" {
         'e',  'f',  'g',  'h',  '5',  '6',  '7',  '8',
         'E',  'F',  'G',  'H',  '^',  '&',  '*',  '(',
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var cluster_chain = try Fat32FS(@TypeOf(stream)).ClusterChainIterator.init(std.testing.allocator, fat_config, 2, stream);
     defer cluster_chain.deinit();
 
@@ -3120,7 +3120,7 @@ test "EntryIterator.checkRead - read new cluster" {
         'e',  'f',  'g',  'h',  '5',  '6',  '7',  '8',
         'E',  'F',  'G',  'H',  '^',  '&',  '*',  '(',
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var cluster_chain = try Fat32FS(@TypeOf(stream)).ClusterChainIterator.init(std.testing.allocator, fat_config, 2, stream);
     defer cluster_chain.deinit();
 
@@ -3170,7 +3170,7 @@ test "EntryIterator.checkRead - end of cluster chain" {
         'e',  'f',  'g',  'h',  '5',  '6',  '7',  '8',
         'E',  'F',  'G',  'H',  '^',  '&',  '*',  '(',
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var cluster_chain = try Fat32FS(@TypeOf(stream)).ClusterChainIterator.init(std.testing.allocator, fat_config, 2, stream);
     defer cluster_chain.deinit();
 
@@ -3226,7 +3226,7 @@ test "EntryIterator.nextImp - end of entries" {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var cluster_chain = try Fat32FS(@TypeOf(stream)).ClusterChainIterator.init(std.testing.allocator, fat_config, 2, stream);
     defer cluster_chain.deinit();
 
@@ -3284,7 +3284,7 @@ test "EntryIterator.nextImp - just deleted files" {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var cluster_chain = try Fat32FS(@TypeOf(stream)).ClusterChainIterator.init(std.testing.allocator, fat_config, 2, stream);
     defer cluster_chain.deinit();
 
@@ -3342,7 +3342,7 @@ test "EntryIterator.nextImp - short name only" {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var cluster_chain = try Fat32FS(@TypeOf(stream)).ClusterChainIterator.init(std.testing.allocator, fat_config, 2, stream);
     defer cluster_chain.deinit();
 
@@ -3416,7 +3416,7 @@ test "EntryIterator.nextImp - long name only" {
     };
     // FAT 2 test
     {
-        var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+        const stream = &std.io.fixedBufferStream(buff_stream[0..]);
         var cluster_chain = try Fat32FS(@TypeOf(stream)).ClusterChainIterator.init(std.testing.allocator, fat_config, 2, stream);
         defer cluster_chain.deinit();
 
@@ -3435,7 +3435,7 @@ test "EntryIterator.nextImp - long name only" {
 
     // FAT 4 test
     {
-        var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+        const stream = &std.io.fixedBufferStream(buff_stream[0..]);
         var cluster_chain = try Fat32FS(@TypeOf(stream)).ClusterChainIterator.init(std.testing.allocator, fat_config, 4, stream);
         defer cluster_chain.deinit();
 
@@ -3499,7 +3499,7 @@ test "EntryIterator.nextImp - long name, incorrect check sum" {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var cluster_chain = try Fat32FS(@TypeOf(stream)).ClusterChainIterator.init(std.testing.allocator, fat_config, 2, stream);
     defer cluster_chain.deinit();
 
@@ -3565,7 +3565,7 @@ test "EntryIterator.nextImp - long name missing entry" {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var cluster_chain = try Fat32FS(@TypeOf(stream)).ClusterChainIterator.init(std.testing.allocator, fat_config, 2, stream);
     defer cluster_chain.deinit();
 
@@ -3631,7 +3631,7 @@ test "EntryIterator.nextImp - valid short and long entry" {
         0xFE, 0x50, 0x00, 0x00, 0x00, 0x00, 0x6E, 0xA9,
         0xFE, 0x50, 0x08, 0x00, 0x13, 0x00, 0x00, 0x00,
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var cluster_chain = try Fat32FS(@TypeOf(stream)).ClusterChainIterator.init(std.testing.allocator, fat_config, 2, stream);
     defer cluster_chain.deinit();
 
@@ -3711,7 +3711,7 @@ test "EntryIterator.next - skips orphan long entry" {
         0xF9, 0x50, 0x00, 0x00, 0x00, 0x00, 0x48, 0x76,
         0xF9, 0x50, 0x03, 0x00, 0x10, 0x00, 0x00, 0x00,
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var cluster_chain = try Fat32FS(@TypeOf(stream)).ClusterChainIterator.init(std.testing.allocator, fat_config, 2, stream);
     defer cluster_chain.deinit();
 
@@ -3765,7 +3765,7 @@ test "EntryIterator.init - free on OutOfMemory" {
         'a',  'b',  'c',  'd',  '1',  '2',  '3',  '4',
         'A',  'B',  'C',  'D',  '!',  '"',  '$',  '%',
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     const allocations: usize = 2;
 
     var i: usize = 0;
@@ -3801,7 +3801,7 @@ test "EntryIterator.init - free on BadRead" {
         // Data region (too short)
         'a',  'b',  'c',  'd',  '1',  '2',  '3',  '4',
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     try expectError(error.BadRead, Fat32FS(@TypeOf(stream)).EntryIterator.init(std.testing.allocator, fat_config, 2, stream));
 }
 
@@ -4015,7 +4015,7 @@ test "Fat32FS.open - no create - hand crafted" {
     var test_file_buf = try std.testing.allocator.alloc(u8, 1024 * 1024);
     defer std.testing.allocator.free(test_file_buf);
 
-    var stream = &std.io.fixedBufferStream(test_file_buf[0..]);
+    const stream = &std.io.fixedBufferStream(test_file_buf[0..]);
 
     try mkfat32.Fat32.make(.{ .image_size = test_file_buf.len }, stream, true);
 
@@ -4056,8 +4056,8 @@ test "Fat32FS.open - no create - hand crafted" {
     const file = try vfs.openFile("/ramdisk_test1.txt", .NO_CREATION);
     defer file.close();
 
-    try expect(test_fs.opened_files.contains(@ptrCast(*const vfs.Node, file)));
-    const opened_info = test_fs.opened_files.get(@ptrCast(*const vfs.Node, file)).?;
+    try expect(test_fs.opened_files.contains(@as(*const vfs.Node, @ptrCast(file))));
+    const opened_info = test_fs.opened_files.get(@as(*const vfs.Node, @ptrCast(file))).?;
     try expectEqual(opened_info.cluster, 3);
     try expectEqual(opened_info.size, 16);
 }
@@ -4100,7 +4100,7 @@ test "Fat32FS.open - create file" {
     var test_file_buf = try std.testing.allocator.alloc(u8, 1024 * 1024);
     defer std.testing.allocator.free(test_file_buf);
 
-    var stream = &std.io.fixedBufferStream(test_file_buf[0..]);
+    const stream = &std.io.fixedBufferStream(test_file_buf[0..]);
 
     try mkfat32.Fat32.make(.{ .image_size = test_file_buf.len }, stream, true);
 
@@ -4131,7 +4131,7 @@ test "Fat32FS.open - create directory" {
     var test_file_buf = try std.testing.allocator.alloc(u8, 1024 * 1024);
     defer std.testing.allocator.free(test_file_buf);
 
-    var stream = &std.io.fixedBufferStream(test_file_buf[0..]);
+    const stream = &std.io.fixedBufferStream(test_file_buf[0..]);
 
     try mkfat32.Fat32.make(.{ .image_size = test_file_buf.len }, stream, true);
 
@@ -4155,7 +4155,7 @@ test "Fat32FS.open - create symlink" {
     var test_file_buf = try std.testing.allocator.alloc(u8, 1024 * 1024);
     defer std.testing.allocator.free(test_file_buf);
 
-    var stream = &std.io.fixedBufferStream(test_file_buf[0..]);
+    const stream = &std.io.fixedBufferStream(test_file_buf[0..]);
 
     try mkfat32.Fat32.make(.{ .image_size = test_file_buf.len }, stream, true);
 
@@ -4171,7 +4171,7 @@ test "Fat32FS.open - create nested directories" {
     var test_file_buf = try std.testing.allocator.alloc(u8, 1024 * 1024);
     defer std.testing.allocator.free(test_file_buf);
 
-    var stream = &std.io.fixedBufferStream(test_file_buf[0..]);
+    const stream = &std.io.fixedBufferStream(test_file_buf[0..]);
 
     try mkfat32.Fat32.make(.{ .image_size = test_file_buf.len }, stream, true);
 
@@ -4372,7 +4372,7 @@ test "Fat32FS.findNextFreeCluster - free on error" {
         0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
         0x05, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x0F,
     };
-    var stream = &std.io.fixedBufferStream(fat_buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(fat_buff_stream[0..]);
     var test_fs = try testFAT32FS(std.testing.allocator, stream, fat_config);
     defer test_fs.destroy() catch unreachable;
 
@@ -4418,7 +4418,7 @@ test "Fat32FS.findNextFreeCluster - alloc cluster in first sector" {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
-    var stream = &std.io.fixedBufferStream(fat_buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(fat_buff_stream[0..]);
     var test_fs = try testFAT32FS(std.testing.allocator, stream, fat_config);
     defer test_fs.destroy() catch unreachable;
 
@@ -4468,7 +4468,7 @@ test "Fat32FS.findNextFreeCluster - alloc cluster in second sector" {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
-    var stream = &std.io.fixedBufferStream(fat_buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(fat_buff_stream[0..]);
     var test_fs = try testFAT32FS(std.testing.allocator, stream, fat_config);
     defer test_fs.destroy() catch unreachable;
 
@@ -4518,7 +4518,7 @@ test "Fat32FS.findNextFreeCluster - alloc cluster over sector boundary" {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
-    var stream = &std.io.fixedBufferStream(fat_buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(fat_buff_stream[0..]);
     var test_fs = try testFAT32FS(std.testing.allocator, stream, fat_config);
     defer test_fs.destroy() catch unreachable;
 
@@ -4558,7 +4558,7 @@ test "Fat32FS.findNextFreeCluster - no free cluster" {
         0xFF, 0xFF, 0xFF, 0x0F, 0xFF, 0xFF, 0xFF, 0x0F,
         0xFF, 0xFF, 0xFF, 0x0F, 0xFF, 0xFF, 0xFF, 0x0F,
     };
-    var stream = &std.io.fixedBufferStream(fat_buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(fat_buff_stream[0..]);
     var test_fs = try testFAT32FS(std.testing.allocator, stream, fat_config);
     defer test_fs.destroy() catch unreachable;
 
@@ -4615,7 +4615,7 @@ test "Fat32FS.findNextFreeCluster - updates FSInfo" {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     } ++ [_]u8{0x00} ** 480;
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var test_fs = try testFAT32FS(std.testing.allocator, stream, fat_config);
     defer test_fs.destroy() catch unreachable;
 
@@ -4668,7 +4668,7 @@ test "Fat32FS.findNextFreeCluster - updates cluster chain with parent" {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
-    var stream = &std.io.fixedBufferStream(fat_buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(fat_buff_stream[0..]);
     var test_fs = try testFAT32FS(std.testing.allocator, stream, fat_config);
     defer test_fs.destroy() catch unreachable;
 
@@ -4681,7 +4681,7 @@ test "Fat32FS.findNextFreeCluster - updates cluster chain with parent" {
 
 test "Fat32FS.nameToLongName - name too long" {
     const long_name = [_]u8{'A'} ** 256;
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     try expectError(error.InvalidName, Fat32FS(@TypeOf(stream)).nameToLongName(std.testing.allocator, long_name[0..]));
 }
 
@@ -4692,7 +4692,7 @@ test "Fat32FS.nameToLongName - leading spaces" {
         [_]u8{' '} ** 256 ++ "file.txt",
     };
 
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
 
     const expected = [_]u16{ 'f', 'i', 'l', 'e', '.', 't', 'x', 't' };
 
@@ -4719,7 +4719,7 @@ test "Fat32FS.nameToLongName - invalid name" {
         "\u{12345}file.txt",
     };
 
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     for (name_cases) |case| {
         try expectError(error.InvalidName, Fat32FS(@TypeOf(stream)).nameToLongName(std.testing.allocator, case[0..]));
     }
@@ -4733,7 +4733,7 @@ test "Fat32FS.nameToLongName - trailing spaces or dots" {
         "file.txt" ++ [_]u8{' '} ** 256,
     };
 
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
 
     const expected = [_]u16{ 'f', 'i', 'l', 'e', '.', 't', 'x', 't' };
 
@@ -4761,7 +4761,7 @@ test "Fat32FS.nameToLongName - valid name" {
         "file.txt",
     };
 
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     for (name_cases) |case| {
         // Can just test no error
         const actual = try Fat32FS(@TypeOf(stream)).nameToLongName(std.testing.allocator, case[0..]);
@@ -4770,7 +4770,7 @@ test "Fat32FS.nameToLongName - valid name" {
 }
 
 test "Fat32FS.isValidSFNChar - invalid" {
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     try expectEqual(Fat32FS(@TypeOf(stream)).isValidSFNChar(' '), null);
     try expectEqual(Fat32FS(@TypeOf(stream)).isValidSFNChar('€'), null);
     try expectEqual(Fat32FS(@TypeOf(stream)).isValidSFNChar('+'), null);
@@ -4791,7 +4791,7 @@ test "Fat32FS.longNameToShortName - leading dots and spaces" {
         ". . file.txt",
     };
 
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     const expected = "FILE~1  TXT";
 
     for (name_cases) |case| {
@@ -4811,7 +4811,7 @@ test "Fat32FS.longNameToShortName - embedded spaces" {
         "file.tx     t",
     };
 
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     const expected = "FILE~1  TXT";
 
     for (name_cases) |case| {
@@ -4831,7 +4831,7 @@ test "Fat32FS.longNameToShortName - dot before end" {
         "fi.   le.txt",
     };
 
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     const expected = "FILE~1  TXT";
 
     for (name_cases) |case| {
@@ -4853,7 +4853,7 @@ test "Fat32FS.longNameToShortName - long name" {
         "looooo.txttttt",
     };
 
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     const expected = "LOOOOO~1TXT";
 
     for (name_cases) |case| {
@@ -4871,7 +4871,7 @@ test "Fat32FS.longNameToShortName - short name" {
         "FiLe1234.txt",
     };
 
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     const expected = "FILE1234TXT";
 
     for (name_cases) |case| {
@@ -4894,7 +4894,7 @@ test "Fat32FS.longNameToShortName - invalid short name characters" {
         "€file.txt",
     };
 
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     const expected = "_FILE~1 TXT";
 
     for (name_cases) |case| {
@@ -4913,7 +4913,7 @@ test "Fat32FS.longNameToShortName - existing name short" {
         "FILE~2  TXT".*,
     };
 
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     const expected = "FILE~3  TXT";
 
     const long_name = try Fat32FS(@TypeOf(stream)).nameToLongName(std.testing.allocator, "file.txt");
@@ -4930,7 +4930,7 @@ test "Fat32FS.longNameToShortName - existing name short rev" {
         "FILE    TXT".*,
     };
 
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     const expected = "FILE~3  TXT";
 
     const long_name = try Fat32FS(@TypeOf(stream)).nameToLongName(std.testing.allocator, "file.txt");
@@ -4947,7 +4947,7 @@ test "Fat32FS.longNameToShortName - existing name long" {
         "FILEFI~2TXT".*,
     };
 
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     const expected = "FILEFI~3TXT";
 
     const long_name = try Fat32FS(@TypeOf(stream)).nameToLongName(std.testing.allocator, "filefilefile.txt");
@@ -4963,7 +4963,7 @@ test "Fat32FS.longNameToShortName - existing name long no match" {
         "FILEFI~2TXT".*,
     };
 
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     const expected = "FILEFILETXT";
 
     const long_name = try Fat32FS(@TypeOf(stream)).nameToLongName(std.testing.allocator, "filefile.txt");
@@ -4977,7 +4977,7 @@ test "Fat32FS.longNameToShortName - trail number to large" {
         "F~999999TXT".*,
     };
 
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
 
     const long_name = try Fat32FS(@TypeOf(stream)).nameToLongName(std.testing.allocator, "filefilefile.txt");
     defer std.testing.allocator.free(long_name);
@@ -4997,7 +4997,7 @@ test "Fat32FS.longNameToShortName - large trail number" {
         "FILE~9  TXT".*,
     };
 
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     const expected = "FILE~10 TXT";
 
     const long_name = try Fat32FS(@TypeOf(stream)).nameToLongName(std.testing.allocator, "file.txt");
@@ -5007,7 +5007,7 @@ test "Fat32FS.longNameToShortName - large trail number" {
 }
 
 test "Fat32FS.longNameToShortName - CP437" {
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     const expected = [_]u8{0xE0} ++ "LPHA   TXT";
 
     const long_name = try Fat32FS(@TypeOf(stream)).nameToLongName(std.testing.allocator, "αlpha.txt");
@@ -5017,7 +5017,7 @@ test "Fat32FS.longNameToShortName - CP437" {
 }
 
 test "Fat32FS.createLongNameEntry - less than 13 characters" {
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     // Pre-calculated check fum for file.txt => FILE    TXT
     const check_sum: u8 = 25;
     // Using valid long name
@@ -5040,7 +5040,7 @@ test "Fat32FS.createLongNameEntry - less than 13 characters" {
 }
 
 test "Fat32FS.createLongNameEntry - greater than 13 characters" {
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     // Pre-calculated check fum for filefilefilefile.txt => FILEFI~1TXT
     const check_sum: u8 = 123;
     // Using valid long name
@@ -5051,7 +5051,7 @@ test "Fat32FS.createLongNameEntry - greater than 13 characters" {
 
     try expectEqual(entries.len, 2);
 
-    var expected = [_]LongName{
+    const expected = [_]LongName{
         LongName{
             .order = 0x42,
             .first = [_]u16{'i'} ++ [_]u16{'l'} ++ [_]u16{'e'} ++ [_]u16{'.'} ++ [_]u16{'t'},
@@ -5073,7 +5073,7 @@ test "Fat32FS.createLongNameEntry - greater than 13 characters" {
 }
 
 test "Fat32FS.createLongNameEntry - max 255 characters" {
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     // Pre-calculated check fum for A**255 => AAAAAA~1TXT
     const check_sum: u8 = 17;
     // Using valid long name
@@ -5095,8 +5095,8 @@ test "Fat32FS.createLongNameEntry - max 255 characters" {
         .third = UA ** 2,
     }} ** 20;
 
-    for (expected) |*e, i| {
-        e.order = 20 - @intCast(u8, i);
+    for (expected, 0..) |*e, i| {
+        e.order = 20 - @as(u8, @intCast(i));
     }
     expected[0] = LongName{
         .order = 0x54, // 0x40 | 0x14
@@ -5106,13 +5106,13 @@ test "Fat32FS.createLongNameEntry - max 255 characters" {
         .third = [_]u16{ 0xFFFF, 0xFFFF },
     };
 
-    for (expected) |ex, i| {
+    for (expected, 0..) |ex, i| {
         try expectEqual(entries[i], ex);
     }
 }
 
 test "Fat32FS.createShortNameEntry" {
-    var stream = &std.io.fixedBufferStream(&[_]u8{});
+    const stream = &std.io.fixedBufferStream(&[_]u8{});
     const actual = Fat32FS(@TypeOf(stream)).createShortNameEntry("FILE    TXT".*, .None, 0x10);
     // Expects 12:12:13 12/12/2012 from mock arch
     const expected = ShortName{
@@ -5166,7 +5166,7 @@ test "Fat32FS.writeEntries - all free cluster" {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var test_fs = try testFAT32FS(std.testing.allocator, stream, fat_config);
     defer test_fs.destroy() catch unreachable;
 
@@ -5229,7 +5229,7 @@ test "Fat32FS.writeEntries - half free cluster" {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var test_fs = try testFAT32FS(std.testing.allocator, stream, fat_config);
     defer test_fs.destroy() catch unreachable;
 
@@ -5285,7 +5285,7 @@ test "Fat32FS.writeEntries - full cluster" {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var test_fs = try testFAT32FS(std.testing.allocator, stream, fat_config);
     defer test_fs.destroy() catch unreachable;
 
@@ -5353,7 +5353,7 @@ test "Fat32FS.writeEntries - large entry over 3 clusters" {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var test_fs = try testFAT32FS(std.testing.allocator, stream, fat_config);
     defer test_fs.destroy() catch unreachable;
 
@@ -5424,7 +5424,7 @@ test "Fat32FS.createFileOrDir - create file" {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var test_fs = try testFAT32FS(std.testing.allocator, stream, fat_config);
     defer test_fs.destroy() catch unreachable;
 
@@ -5492,7 +5492,7 @@ test "Fat32FS.createFileOrDir - create directory" {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var test_fs = try testFAT32FS(std.testing.allocator, stream, fat_config);
     defer test_fs.destroy() catch unreachable;
 
@@ -5565,7 +5565,7 @@ test "Fat32FS.createFileOrDir - create file parent cluster full" {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var test_fs = try testFAT32FS(std.testing.allocator, stream, fat_config);
     defer test_fs.destroy() catch unreachable;
 
@@ -5655,7 +5655,7 @@ test "Fat32FS.createFileOrDir - half root" {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
-    var stream = &std.io.fixedBufferStream(buff_stream[0..]);
+    const stream = &std.io.fixedBufferStream(buff_stream[0..]);
     var test_fs = try testFAT32FS(std.testing.allocator, stream, fat_config);
     defer test_fs.destroy() catch unreachable;
 
@@ -5684,7 +5684,7 @@ test "Fat32FS.write - small file" {
     var test_file_buf = try std.testing.allocator.alloc(u8, 1024 * 1024);
     defer std.testing.allocator.free(test_file_buf);
 
-    var stream = &std.io.fixedBufferStream(test_file_buf[0..]);
+    const stream = &std.io.fixedBufferStream(test_file_buf[0..]);
 
     try mkfat32.Fat32.make(.{ .image_size = test_file_buf.len }, stream, false);
 
@@ -5720,7 +5720,7 @@ test "Fat32FS.write - large file" {
     var test_file_buf = try std.testing.allocator.alloc(u8, 1024 * 1024);
     defer std.testing.allocator.free(test_file_buf);
 
-    var stream = &std.io.fixedBufferStream(test_file_buf[0..]);
+    const stream = &std.io.fixedBufferStream(test_file_buf[0..]);
 
     try mkfat32.Fat32.make(.{ .image_size = test_file_buf.len }, stream, false);
 
@@ -5732,7 +5732,7 @@ test "Fat32FS.write - large file" {
     const file = try vfs.openFile("/file.txt", .CREATE_FILE);
 
     // Check the opened file
-    const open_info1 = test_fs.opened_files.get(@ptrCast(*const vfs.Node, file)).?;
+    const open_info1 = test_fs.opened_files.get(@as(*const vfs.Node, @ptrCast(file))).?;
     try expectEqual(open_info1.cluster, 3);
     try expectEqual(open_info1.size, 0);
     try expectEqual(open_info1.entry_cluster, 2);
@@ -5759,7 +5759,7 @@ test "Fat32FS.write - large file" {
     const read_file = try vfs.openFile("/file.txt", .NO_CREATION);
     defer read_file.close();
 
-    const open_info2 = test_fs.opened_files.get(@ptrCast(*const vfs.Node, read_file)).?;
+    const open_info2 = test_fs.opened_files.get(@as(*const vfs.Node, @ptrCast(read_file))).?;
     try expectEqual(open_info2.cluster, 3);
     try expectEqual(open_info2.size, text.len);
     try expectEqual(open_info2.entry_cluster, 2);
@@ -5812,7 +5812,7 @@ test "Fat32FS.write - test files" {
     var test_file_buf = try std.testing.allocator.alloc(u8, 1024 * 1024);
     defer std.testing.allocator.free(test_file_buf);
 
-    var stream = &std.io.fixedBufferStream(test_file_buf[0..]);
+    const stream = &std.io.fixedBufferStream(test_file_buf[0..]);
 
     try mkfat32.Fat32.make(.{ .image_size = test_file_buf.len }, stream, false);
 
@@ -5835,7 +5835,7 @@ test "Fat32FS.write - not enough space" {
     var test_file_buf = try std.testing.allocator.alloc(u8, 37 * 512);
     defer std.testing.allocator.free(test_file_buf);
 
-    var stream = &std.io.fixedBufferStream(test_file_buf[0..]);
+    const stream = &std.io.fixedBufferStream(test_file_buf[0..]);
 
     try mkfat32.Fat32.make(.{ .image_size = test_file_buf.len }, stream, false);
 

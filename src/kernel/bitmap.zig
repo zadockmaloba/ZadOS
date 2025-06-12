@@ -263,11 +263,11 @@ pub fn Bitmap(comptime num_entries: ?usize, comptime BitmapType: type) type {
             if (self.num_free_entries == 0) {
                 return null;
             }
-            for (self.bitmaps, 0..) |*bmp, i| {
-                if (bmp.* == BITMAP_FULL) {
+            for (self.bitmaps[0..], 0..) |bmp, i| {
+                if (bmp == BITMAP_FULL) {
                     continue;
                 }
-                const bit = @as(IndexType, @truncate(@as(BitmapType, @ctz(~bmp.*))));
+                const bit = @as(IndexType, @truncate(@as(BitmapType, @ctz(~bmp))));
                 const idx = bit + i * ENTRIES_PER_BITMAP;
                 // Failing here means that the index is outside of the bitmap, so there are no free entries
                 self.setEntry(idx) catch return null;
