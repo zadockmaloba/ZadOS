@@ -393,7 +393,8 @@ pub fn init(mem_profile: *const MemProfile) void {
     paging.init(mem_profile);
 
     // Initialize UART for early output
-    uart.init();
+    // TODO: Fix issues with uart.init()
+    //uart.init();
 }
 
 ///
@@ -406,7 +407,7 @@ pub fn init(mem_profile: *const MemProfile) void {
 ///     True if the expected values were found, else false
 ///
 pub fn runtimeTestCheckUserTaskState(ctx: *const CpuState) bool {
-    return ctx.eax == 0xCAFE and ctx.ebx == 0xBEEF;
+    return ctx.x0 == 0xCAFE and ctx.x1 == 0xBEEF;
 }
 
 ///
