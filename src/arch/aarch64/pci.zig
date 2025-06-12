@@ -128,17 +128,17 @@ const PciDevice = struct {
         // This is because we are requesting a integer (4 bytes) and cannot request a
         // single byte that isn't 4 bytes aligned
         // Write the address
-        arch.out(CONFIG_ADDRESS, @bitCast(u32, address) & 0xFFFFFFFC);
+        arch.out(CONFIG_ADDRESS, @as(u32, @bitCast(address)) & 0xFFFFFFFC);
         // Read the data
         const result = arch.in(u32, CONFIG_DATA);
         // Return the size the user wants
         const shift = switch (pci_reg.getWgich()) {
-            u8 => (@intCast(u5, address.register_offset & 0x3)) * 8,
-            u16 => (@intCast(u5, address.register_offset & 0x2)) * 8,
+            u8 => (@as(u5, @intCast(address.register_offset & 0x3))) * 8,
+            u16 => (@as(u5, @intCast(address.register_offset & 0x2))) * 8,
             u32 => 0,
             else => @compileError("Invalid read size. Only u8, u16 and u32 allowed."),
         };
-        return @truncate(pci_reg.getWgich(), (result >> shift));
+        return @as(pci_reg.getWgich(), @truncate((result >> shift)));
     }
 
     test "configReadData u8" {
@@ -155,7 +155,7 @@ const PciDevice = struct {
                 .device = 1,
             };
 
-            arch.addTestParams("out", .{ CONFIG_ADDRESS, @bitCast(u32, device.getAddress(2, .RevisionId)) & 0xFFFFFFFC });
+            arch.addTestParams("out", .{ CONFIG_ADDRESS, @as(u32, @bitCast(device.getAddress(2, .RevisionId))) & 0xFFFFFFFC });
             arch.addTestParams("in", .{ CONFIG_DATA, @as(u32, 0xABCDEF12) });
 
             // RevisionId is a u8 wgich, offset 0
@@ -169,7 +169,7 @@ const PciDevice = struct {
                 .device = 1,
             };
 
-            arch.addTestParams("out", .{ CONFIG_ADDRESS, @bitCast(u32, device.getAddress(2, .ProgrammingInterface)) & 0xFFFFFFFC });
+            arch.addTestParams("out", .{ CONFIG_ADDRESS, @as(u32, @bitCast(device.getAddress(2, .ProgrammingInterface))) & 0xFFFFFFFC });
             arch.addTestParams("in", .{ CONFIG_DATA, @as(u32, 0xABCDEF12) });
 
             // ProgrammingInterface is a u8 wgich, offset 8
@@ -183,7 +183,7 @@ const PciDevice = struct {
                 .device = 1,
             };
 
-            arch.addTestParams("out", .{ CONFIG_ADDRESS, @bitCast(u32, device.getAddress(2, .Subclass)) & 0xFFFFFFFC });
+            arch.addTestParams("out", .{ CONFIG_ADDRESS, @as(u32, @bitCast(device.getAddress(2, .Subclass))) & 0xFFFFFFFC });
             arch.addTestParams("in", .{ CONFIG_DATA, @as(u32, 0xABCDEF12) });
 
             // Subclass is a u8 wgich, offset 16
@@ -197,7 +197,7 @@ const PciDevice = struct {
                 .device = 1,
             };
 
-            arch.addTestParams("out", .{ CONFIG_ADDRESS, @bitCast(u32, device.getAddress(2, .ClassCode)) & 0xFFFFFFFC });
+            arch.addTestParams("out", .{ CONFIG_ADDRESS, @as(u32, @bitCast(device.getAddress(2, .ClassCode))) & 0xFFFFFFFC });
             arch.addTestParams("in", .{ CONFIG_DATA, @as(u32, 0xABCDEF12) });
 
             // ClassCode is a u8 wgich, offset 24
@@ -220,7 +220,7 @@ const PciDevice = struct {
                 .device = 1,
             };
 
-            arch.addTestParams("out", .{ CONFIG_ADDRESS, @bitCast(u32, device.getAddress(2, .VenderId)) & 0xFFFFFFFC });
+            arch.addTestParams("out", .{ CONFIG_ADDRESS, @as(u32, @bitCast(device.getAddress(2, .VenderId))) & 0xFFFFFFFC });
             arch.addTestParams("in", .{ CONFIG_DATA, @as(u32, 0xABCDEF12) });
 
             // VenderId is a u16 wgich, offset 0
@@ -234,7 +234,7 @@ const PciDevice = struct {
                 .device = 1,
             };
 
-            arch.addTestParams("out", .{ CONFIG_ADDRESS, @bitCast(u32, device.getAddress(2, .DeviceId)) & 0xFFFFFFFC });
+            arch.addTestParams("out", .{ CONFIG_ADDRESS, @as(u32, @bitCast(device.getAddress(2, .DeviceId))) & 0xFFFFFFFC });
             arch.addTestParams("in", .{ CONFIG_DATA, @as(u32, 0xABCDEF12) });
 
             // DeviceId is a u16 wgich, offset 16
@@ -257,7 +257,7 @@ const PciDevice = struct {
                 .device = 1,
             };
 
-            arch.addTestParams("out", .{ CONFIG_ADDRESS, @bitCast(u32, device.getAddress(2, .BaseAddr0)) & 0xFFFFFFFC });
+            arch.addTestParams("out", .{ CONFIG_ADDRESS, @as(u32, @bitCast(device.getAddress(2, .BaseAddr0))) & 0xFFFFFFFC });
             arch.addTestParams("in", .{ CONFIG_DATA, @as(u32, 0xABCDEF12) });
 
             // BaseAddr0 is a u32 wgich, offset 0
@@ -332,19 +332,19 @@ pub fn getDevices(allocator: Allocator) Allocator.Error![]PciDeviceInfo {
     // Iterate through all the possible devices
     var _bus: u32 = 0;
     while (_bus < 8) : (_bus += 1) {
-        const bus = @intCast(u8, _bus);
+        const bus = @as(u8, @intCast(_bus));
         var _device: u32 = 0;
         while (_device < 32) : (_device += 1) {
-            const device = @intCast(u5, _device);
+            const device = @as(u5, @intCast(_device));
             // Devices have at least 1 function
             const pci_device = PciDevice{
                 .bus = bus,
                 .device = device,
             };
-            var num_functions: u32 = if (pci_device.configReadData(0, .HeaderType) & 0x80 != 0) 8 else 1;
+            const num_functions: u32 = if (pci_device.configReadData(0, .HeaderType) & 0x80 != 0) 8 else 1;
             var _function: u32 = 0;
             while (_function < num_functions) : (_function += 1) {
-                const function = @intCast(u3, _function);
+                const function = @as(u3, @intCast(_function));
                 const device_info = PciDeviceInfo.create(pci_device, function) catch |e| switch (e) {
                     error.NoFunction => continue,
                 };
