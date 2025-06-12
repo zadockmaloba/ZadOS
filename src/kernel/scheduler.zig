@@ -111,9 +111,10 @@ pub fn pickNextTask(ctx: *arch.CpuState) usize {
 ///                   be freed on return.
 ///
 pub fn scheduleTask(new_task: *Task, allocator: Allocator) Allocator.Error!void {
-    const task_node = try allocator.create(TailQueue(*Task).Node);
-    task_node.* = .{ .data = new_task };
-    tasks.prepend(task_node);
+    _ = allocator; // Unused in release builds
+    //const task_node = try allocator.create(TailQueue(*Task).Node);
+    //task_node.* = .{ .data = new_task };
+    try tasks.append(new_task);
 }
 
 ///
@@ -155,7 +156,7 @@ pub fn init(allocator: Allocator, mem_profile: *const mem.MemProfile) Allocator.
     }
 
     // Create the idle task when there are no more tasks left
-    var idle_task = try Task.create(@intFromPtr(idle), true, &vmm.kernel_vmm, allocator, true);
+    var idle_task = try Task.create(@intFromPtr(&idle), true, &vmm.kernel_vmm, allocator, true);
     errdefer idle_task.destroy(allocator);
 
     try scheduleTask(idle_task, allocator);
