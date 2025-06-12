@@ -26,7 +26,7 @@ pub const Error = error{
 };
 
 comptime {
-    std.debug.assert(@typeInfo(syscalls.Syscall).Enum.fields.len <= NUM_HANDLERS);
+    std.debug.assert(@typeInfo(syscalls.Syscall).@"enum".fields.len <= NUM_HANDLERS);
 }
 
 /// The array of registered syscalls
