@@ -455,7 +455,7 @@ fn pageFault(state: *arch.CpuState) u32 {
 /// Arguments:
 ///     IN mem_profile: *const MemProfile - The memory profile of the system and kernel
 ///
-pub fn init(mem_profile: *const MemProfile) void {
+pub fn init_old(mem_profile: *const MemProfile) void {
     log.info("Init\n", .{});
     defer log.info("Done\n", .{});
 
@@ -467,6 +467,50 @@ pub fn init(mem_profile: *const MemProfile) void {
         :
         : [addr] "{eax}" (dir_physaddr),
     );
+    const v_end = std.mem.alignForward(usize, @intFromPtr(mem_profile.vaddr_end), PAGE_SIZE_4KB);
+    switch (build_options.test_mode) {
+        .Initialisation => runtimeTests(v_end),
+        else => {},
+    }
+}
+
+///
+/// Initialise AArch64 paging, overwriting any previous paging set up.
+///
+/// Arguments:
+///     IN mem_profile: *const MemProfile - The memory profile of the system and kernel
+///
+pub fn init(mem_profile: *const MemProfile) void {
+    log.info("Init\n", .{});
+    defer log.info("Done\n", .{});
+
+    isr.registerIsr(isr.PAGE_FAULT, if (build_options.test_mode == .Initialisation) rt_pageFault else pageFault) catch |e| {
+        panic(@errorReturnTrace(), "Failed to register page fault ISR: {}\n", .{e});
+    };
+
+    const dir_physaddr = @intFromPtr(mem.virtToPhys(&kernel_directory));
+
+    // Set TTBR0_EL1 to point to the page table base
+    asm volatile (
+        \\ msr ttbr0_el1, %[addr]
+        :
+        : [addr] "r" (dir_physaddr),
+    );
+
+    // Invalidate TLB
+    asm volatile ("dsb ish\nisb\n");
+
+    // Enable MMU (if not already enabled)
+    // Note: This should be done carefully and likely as part of broader MMU setup
+    // Just an example — actual setup should configure MAIR, TCR, etc.
+    // Here’s a naive enablement (assumes prior proper config):
+    asm volatile (
+        \\ mrs x0, sctlr_el1
+        \\ orr x0, x0, #(1 << 0) // set M (bit 0) to enable MMU
+        \\ msr sctlr_el1, x0
+        \\ isb
+    );
+
     const v_end = std.mem.alignForward(usize, @intFromPtr(mem_profile.vaddr_end), PAGE_SIZE_4KB);
     switch (build_options.test_mode) {
         .Initialisation => runtimeTests(v_end),
