@@ -149,7 +149,7 @@ export fn kernel_main() callconv(.C) void {
     kmain_log.info("Creating init2\n", .{});
 
     // Create a init2 task
-    const stage2_task = task.Task.create(@intFromPtr(initStage2), true, kernel_vmm, kernel_heap.allocator(), true) catch |e| {
+    const stage2_task = task.Task.create(@intFromPtr(&initStage2), true, kernel_vmm, kernel_heap.allocator(), true) catch |e| {
         panic_root.panic(@errorReturnTrace(), "Failed to create init stage 2 task: {}\n", .{e});
     };
     scheduler.scheduleTask(stage2_task, kernel_heap.allocator()) catch |e| {
@@ -193,13 +193,13 @@ fn initStage2() noreturn {
 
     tty.print("Hello Pluto from kernel :)\n", .{});
 
-    const devices = arch.getDevices(kernel_heap.allocator()) catch |e| {
-        panic_root.panic(@errorReturnTrace(), "Unable to get device list: {}\n", .{e});
-    };
+    //const devices = arch.getDevices(kernel_heap.allocator()) catch |e| {
+    //    panic_root.panic(@errorReturnTrace(), "Unable to get device list: {}\n", .{e});
+    //};
 
-    for (devices) |device| {
-        device.print();
-    }
+    //for (devices) |device| {
+    //    device.print();
+    //}
 
     switch (build_options.test_mode) {
         .Initialisation => {
