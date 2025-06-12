@@ -47,29 +47,29 @@ pub fn isValidSyscall(syscall: u32) bool {
 }
 
 ///
-/// Handle a syscall. Gets the syscall number from eax within the context and calls the registered
+/// Handle a syscall. Gets the syscall number from x8 within the context and calls the registered
 /// handler. If an error occurs ebx will be set to its error code, or 0 otherwise.
-/// The syscall result will be stored in eax. If there isn't a registered handler or the syscall is
+/// The syscall result will be stored in x0. If there isn't a registered handler or the syscall is
 /// invalid (>= NUM_HANDLERS) then a warning is logged.
 ///
 /// Arguments:
 ///     IN ctx: *arch.CpuState - The cpu context when the syscall was triggered. The
-///                                      syscall number is stored in eax.
+///                                      syscall number is stored in x0
 ///
 /// Return: usize
 ///     The new stack pointer value
 ///
 fn handle(ctx: *arch.CpuState) usize {
-    // The syscall number is put in eax
-    const syscall = ctx.eax;
+    // The syscall number is put in x8
+    const syscall = ctx.x8;
     if (isValidSyscall(syscall)) {
         if (handlers[syscall]) |handler| {
             const result = handler(ctx, syscallArg(ctx, 0), syscallArg(ctx, 1), syscallArg(ctx, 2), syscallArg(ctx, 3), syscallArg(ctx, 4));
             if (result) |res| {
-                ctx.eax = res;
-                ctx.ebx = 0;
+                ctx.x0 = res;
+                //ctx.ebx = 0;
             } else |e| {
-                ctx.ebx = syscalls.toErrorCode(e);
+                ctx.x0 = syscalls.toErrorCode(e);
             }
         } else {
             log.warn("Syscall {} triggered but not registered\n", .{syscall});
@@ -103,7 +103,7 @@ pub fn registerSyscall(syscall: usize, handler: Handler) Error!void {
 /// Trigger a syscall with no arguments. Returns the value put in eax by the syscall or the error returned in ebx.
 ///
 /// Arguments:
-///     IN syscall: usize - The syscall to trigger, put in eax.
+///     IN syscall: usize - The syscall to trigger, put in x8.
 ///
 /// Return: usize
 ///     The return value from the syscall.
@@ -114,12 +114,12 @@ pub fn registerSyscall(syscall: usize, handler: Handler) Error!void {
 inline fn syscall0(syscall: usize) anyerror!usize {
     const res = asm volatile (
         \\int $0x80
-        : [ret] "={eax}" (-> usize),
-        : [syscall] "{eax}" (syscall),
-        : "ebx"
+        : [ret] "={x0}" (-> usize),
+        : [syscall] "{x8}" (syscall),
+        : "x0"
     );
     const err = asm (""
-        : [ret] "={ebx}" (-> u16),
+        : [ret] "={x0}" (-> u16),
     );
     if (err != 0) {
         return syscalls.fromErrorCode(err);
@@ -143,12 +143,12 @@ inline fn syscall0(syscall: usize) anyerror!usize {
 inline fn syscall1(syscall: usize, arg: usize) anyerror!usize {
     const res = asm volatile (
         \\int $0x80
-        : [ret] "={eax}" (-> usize),
-        : [syscall] "{eax}" (syscall),
-          [arg1] "{ebx}" (arg),
+        : [ret] "={x0}" (-> usize),
+        : [syscall] "{x8}" (syscall),
+          [arg1] "{x0}" (arg),
     );
     const err = asm (""
-        : [ret] "={ebx}" (-> u16),
+        : [ret] "={x0}" (-> u16),
     );
     if (err != 0) {
         return syscalls.fromErrorCode(err);
@@ -173,10 +173,10 @@ inline fn syscall1(syscall: usize, arg: usize) anyerror!usize {
 inline fn syscall2(syscall: usize, arg1: usize, arg2: usize) anyerror!usize {
     const res = asm volatile (
         \\int $0x80
-        : [ret] "={eax}" (-> usize),
-        : [syscall] "{eax}" (syscall),
-          [arg1] "{ebx}" (arg1),
-          [arg2] "{ecx}" (arg2),
+        : [ret] "={x0}" (-> usize),
+        : [syscall] "{x8}" (syscall),
+          [arg1] "{x0}" (arg1),
+          [arg2] "{x1}" (arg2),
     );
     const err = asm (""
         : [ret] "={ebx}" (-> u16),
@@ -205,14 +205,14 @@ inline fn syscall2(syscall: usize, arg1: usize, arg2: usize) anyerror!usize {
 inline fn syscall3(syscall: usize, arg1: usize, arg2: usize, arg3: usize) anyerror!usize {
     const res = asm volatile (
         \\int $0x80
-        : [ret] "={eax}" (-> usize),
-        : [syscall] "{eax}" (syscall),
-          [arg1] "{ebx}" (arg1),
-          [arg2] "{ecx}" (arg2),
-          [arg3] "{edx}" (arg3),
+        : [ret] "={x0}" (-> usize),
+        : [syscall] "{x8}" (syscall),
+          [arg1] "{x0}" (arg1),
+          [arg2] "{x1}" (arg2),
+          [arg3] "{x2}" (arg3),
     );
     const err = asm (""
-        : [ret] "={ebx}" (-> u16),
+        : [ret] "={x0}" (-> u16),
     );
     if (err != 0) {
         return syscalls.fromErrorCode(err);
@@ -239,15 +239,15 @@ inline fn syscall3(syscall: usize, arg1: usize, arg2: usize, arg3: usize) anyerr
 inline fn syscall4(syscall: usize, arg1: usize, arg2: usize, arg3: usize, arg4: usize) anyerror!usize {
     const res = asm volatile (
         \\int $0x80
-        : [ret] "={eax}" (-> usize),
-        : [syscall] "{eax}" (syscall),
-          [arg1] "{ebx}" (arg1),
-          [arg2] "{ecx}" (arg2),
-          [arg3] "{edx}" (arg3),
-          [arg4] "{esi}" (arg4),
+        : [ret] "={x0}" (-> usize),
+        : [syscall] "{x8}" (syscall),
+          [arg1] "{x0}" (arg1),
+          [arg2] "{x1}" (arg2),
+          [arg3] "{x2}" (arg3),
+          [arg4] "{x3}" (arg4),
     );
     const err = asm (""
-        : [ret] "={ebx}" (-> u16),
+        : [ret] "={x0}" (-> u16),
     );
     if (err != 0) {
         return syscalls.fromErrorCode(err);
@@ -275,16 +275,16 @@ inline fn syscall4(syscall: usize, arg1: usize, arg2: usize, arg3: usize, arg4: 
 inline fn syscall5(syscall: usize, arg1: usize, arg2: usize, arg3: usize, arg4: usize, arg5: usize) anyerror!usize {
     const res = asm volatile (
         \\int $0x80
-        : [ret] "={eax}" (-> usize),
-        : [syscall] "{eax}" (syscall),
-          [arg1] "{ebx}" (arg1),
-          [arg2] "{ecx}" (arg2),
-          [arg3] "{edx}" (arg3),
-          [arg4] "{esi}" (arg4),
-          [arg5] "{edi}" (arg5),
+        : [ret] "={x0}" (-> usize),
+        : [syscall] "{x8}" (syscall),
+          [arg1] "{x0}" (arg1),
+          [arg2] "{x1}" (arg2),
+          [arg3] "{x2}" (arg3),
+          [arg4] "{x3}" (arg4),
+          [arg5] "{x4}" (arg5),
     );
     const err = asm (""
-        : [ret] "={ebx}" (-> u16),
+        : [ret] "={x0}" (-> u16),
     );
     if (err != 0) {
         return syscalls.fromErrorCode(err);
@@ -305,11 +305,11 @@ inline fn syscall5(syscall: usize, arg1: usize, arg2: usize, arg3: usize, arg4: 
 ///
 inline fn syscallArg(ctx: *const arch.CpuState, comptime arg_idx: u32) usize {
     return switch (arg_idx) {
-        0 => ctx.ebx,
-        1 => ctx.ecx,
-        2 => ctx.edx,
-        3 => ctx.esi,
-        4 => ctx.edi,
+        0 => ctx.x0,
+        1 => ctx.x1,
+        2 => ctx.x2,
+        3 => ctx.x3,
+        4 => ctx.x4,
         else => @compileError("Arg index must be between 0 and 4"),
     };
 }
