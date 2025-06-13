@@ -27,6 +27,9 @@ const IsrHandler = *const fn (*arch.CpuState) u32;
 /// The number of ISR entries.
 const NUMBER_OF_ENTRIES: u8 = 32;
 
+pub const DATA_ABORT: u16 = 0xBEEF;
+pub const PREFETCH_ABORT: u16 = 0xDEAD;
+
 /// The exception messaged that is printed when a exception happens
 const exception_msg: [NUMBER_OF_ENTRIES][]const u8 = [NUMBER_OF_ENTRIES][]const u8{
     "Divide By Zero",

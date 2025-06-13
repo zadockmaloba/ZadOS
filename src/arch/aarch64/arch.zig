@@ -146,7 +146,7 @@ pub const BootPayload = struct {
 pub const VmmPayload = *paging.PageTable;
 
 /// The payload used in the kernel virtual memory manager
-pub const KERNEL_VMM_PAYLOAD = &paging.kernel_directory;
+pub const KERNEL_VMM_PAYLOAD = &paging.kernel_page_table;
 
 /// The architecture's virtual memory mapper
 pub const VMM_MAPPER: vmm.Mapper(VmmPayload) = vmm.Mapper(VmmPayload){
@@ -343,7 +343,7 @@ pub fn initMem(boot_payload: BootPayload) Allocator.Error!MemProfile {
 ///     OutOfMemory - Unable to allocate space for the stack.
 ///
 pub fn initTask(task: *Task, entry_point: usize, allocator: Allocator, set_up_stack: bool) Allocator.Error!void {
-    task.vmm.payload = &paging.kernel_directory;
+    task.vmm.payload = &paging.kernel_page_table;
 
     if (set_up_stack) {
         const stack = &task.kernel_stack;
@@ -369,7 +369,7 @@ pub fn initTask(task: *Task, entry_point: usize, allocator: Allocator, set_up_st
     if (!task.kernel and !builtin.is_test) {
         // Create new translation tables for user task
         const new_tt = try allocator.create(paging.PageTable);
-        new_tt.* = paging.kernel_directory;
+        new_tt.* = paging.kernel_page_table;
         task.vmm.payload = new_tt;
     }
 }
@@ -383,11 +383,12 @@ pub fn initTask(task: *Task, entry_point: usize, allocator: Allocator, set_up_st
 ///
 pub fn init(mem_profile: *const MemProfile) void {
     // Initialize exception vectors
-    asm volatile (
-        \\.align 11
-        \\adr x0, vector_table
-        \\msr vbar_el1, x0
-        ::: "x0");
+
+    // asm volatile (
+    //     \\.align 11
+    //     \\adr x0, vector_table
+    //     \\msr vbar_el1, x0
+    //     ::: "x0");
 
     // Initialize MMU and caches
     paging.init(mem_profile);

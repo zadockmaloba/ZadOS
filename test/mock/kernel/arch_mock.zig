@@ -87,7 +87,7 @@ pub const VmmPayload = switch (builtin.cpu.arch) {
 };
 
 pub const KERNEL_VMM_PAYLOAD: VmmPayload = switch (builtin.cpu.arch) {
-    .i386 => &x86_paging.kernel_directory,
+    .i386 => &x86_paging.kernel_page_table,
     else => unreachable,
 };
 pub const MEMORY_BLOCK_SIZE: u32 = paging.PAGE_SIZE_4KB;
