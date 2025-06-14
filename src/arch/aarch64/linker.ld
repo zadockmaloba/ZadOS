@@ -4,7 +4,7 @@ ENTRY(_start)
 KERNEL_BASE = 0x40080000;           /* Physical load address */
 KERNEL_VIRT = 0xFFFF000040080000;   /* Virtual address when MMU enabled */
 PAGE_SIZE = 0x1000;                 /* 4KB pages */
-STACK_SIZE = 0x8000;                /* 32KB stack */
+STACK_SIZE = 0x20000;               /* 128KB stack */
 HEAP_SIZE = 0x100000;               /* 1MB heap */
 KERNEL_ADDR_OFFSET = 0x00;
 
