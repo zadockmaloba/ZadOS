@@ -19,6 +19,7 @@ const vfs = @import("kernel/filesystem/vfs.zig");
 const initrd = @import("kernel/filesystem/initrd.zig");
 const keyboard = @import("kernel/keyboard.zig");
 const syscalls = @import("kernel/syscalls.zig");
+const uart = @import("arch/aarch64/uart.zig");
 const Allocator = std.mem.Allocator;
 
 const sys_arch = switch (builtin.cpu.arch) {
@@ -58,9 +59,14 @@ export fn kernel_main() callconv(.C) void {
     // Initialize UART
     //uart.init();
 
+    //var elems: [256]u8 align(16) = [_]u8{0} ** 256;
+    //elems[0] = 0; // Prevent unused variable warning
+
+    uart.simple_print("ZadOS is booting...\n");
+
     log_root.init();
     const boot_payload = arch.BootPayload{
-        .mem_size = 64 * 1024,
+        .mem_size = 512 * 1024 * 1024,
         .dtb_ptr = 0,
     };
 

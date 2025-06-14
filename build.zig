@@ -15,7 +15,7 @@ pub fn build(b: *std.Build) void {
         .default_target = .{
             .cpu_arch = .aarch64,
             .os_tag = .freestanding,
-            .abi = .none,
+            .abi = .eabi,
             .cpu_model = .{ .explicit = &std.Target.aarch64.cpu.cortex_a72 },
         },
     });

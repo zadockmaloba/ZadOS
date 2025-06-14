@@ -70,7 +70,7 @@ const Config = struct {
 };
 
 /// UART instance struct
-const Uart = struct {
+pub const Uart = struct {
     base_addr: usize,
     config: Config,
 
@@ -144,7 +144,7 @@ const Uart = struct {
 };
 
 /// Global UART instance
-var uart0 = Uart{
+pub var uart0 = Uart{
     .base_addr = UART_BASE,
     .config = .{},
 };
@@ -171,13 +171,17 @@ pub fn print(str: []const u8) Error!void {
 
 /// Write a formatted string to UART
 pub fn printf(comptime format: []const u8, args: anytype) Error!void {
-    var buf: [10]u8 = [_]u8{0} ** 10; // Buffer for formatted output
-    const str = std.fmt.bufPrintZ(&buf, format ++ "\x00", args) catch {
-        simple_print("Error formatting string\n");
+    // Much larger buffer to handle most format strings
+    var buf: [256]u8 = [_]u8{0} ** 256;
+
+    // Format the string using std.fmt.bufPrint (not bufPrintZ since we don't need null termination)
+    const str = std.fmt.bufPrint(&buf, format, args) catch {
+        try uart0.writeString("Error: Format buffer overflow\n");
         return Error.BufferFull;
     };
-    simple_print(str);
-    return uart0.writeString(format);
+
+    // Write the formatted string using the UART driver
+    try uart0.writeString(str);
 }
 
 pub fn setCursor(_: u8, _: u8) void {

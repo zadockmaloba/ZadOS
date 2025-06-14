@@ -8,7 +8,7 @@ const uart = @import("../arch/aarch64/uart.zig");
 const LoggingError = error{};
 
 /// The Writer for the format function
-const Writer = std.io.Writer(void, LoggingError, logCallback);
+const Writer = std.io.Writer(*uart.Uart, LoggingError, logCallback);
 
 ///
 /// The call back function for the std library format function.
@@ -24,7 +24,7 @@ const Writer = std.io.Writer(void, LoggingError, logCallback);
 /// Error: LoggingError
 ///     {} - No error as LoggingError is empty.
 ///
-fn logCallback(context: void, str: []const u8) LoggingError!usize {
+fn logCallback(context: *uart.Uart, str: []const u8) LoggingError!usize {
     // Suppress unused var warning
     _ = context;
     uart.print(str) catch {
@@ -45,7 +45,7 @@ fn logCallback(context: void, str: []const u8) LoggingError!usize {
 ///
 pub fn log(comptime level: std.log.Level, comptime format: []const u8, args: anytype) void {
     scheduler.taskSwitching(false);
-    fmt.format(Writer{ .context = {} }, "[" ++ @tagName(level) ++ "] " ++ format, args) catch unreachable;
+    fmt.format(Writer{ .context = &uart.uart0 }, "[" ++ @tagName(level) ++ "] " ++ format, args) catch unreachable;
     scheduler.taskSwitching(true);
 }
 

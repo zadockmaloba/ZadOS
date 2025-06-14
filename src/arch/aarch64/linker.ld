@@ -1,66 +1,92 @@
 ENTRY(_start)
 
-/*SECTIONS_TMP {*/
-/*    . = 0x40100000;*/ /* RAM starts at 0x40000000 but if we ask to load the kernel there, QEMU will not load a DTB */
- /*   .startup . : { boot.o(.text) }*/
-/*    .text : { *(.text) }*/
-/*    .data : { *(.data) }*/
-/*    .bss : { *(.bss COMMON) }*/
-/*    . = ALIGN(8);*/
-/*    . += 0x1000;*/ /* 4kB of stack memory */
-/*    stack_top = .;*/
-/*}*/
+/* Memory layout constants */
+KERNEL_BASE = 0x40080000;           /* Physical load address */
+KERNEL_VIRT = 0xFFFF000040080000;   /* Virtual address when MMU enabled */
+PAGE_SIZE = 0x1000;                 /* 4KB pages */
+STACK_SIZE = 0x8000;                /* 32KB stack */
+HEAP_SIZE = 0x100000;               /* 1MB heap */
+KERNEL_ADDR_OFFSET = 0x00;
 
-/* ARM64 memory layout for QEMU virt machine
- * Physical memory:
- * - RAM starts at 0x40000000
- * - We load at 0x40080000 to leave room for DTB
- * Virtual memory (when MMU is enabled):
- * - Kernel space starts at 0xFFFF000000000000
- */
-KERNEL_ADDR_OFFSET = 0; /*0xFFFF000000000000;*/
-KERNEL_VIRT_BASE = KERNEL_ADDR_OFFSET + 0x80000;
-KERNEL_VADDR_START = KERNEL_ADDR_OFFSET + 0x80000;
+SECTIONS {
+    . = KERNEL_BASE;
 
-SECTIONS
-{
-    /* Load kernel at 0x40080000 physical address */
-    . = 0x40080000;
-    KERNEL_PHYSADDR_START = .;
-
-    .text.boot : {
+    /* Boot code must be first and at physical address */
+    .text.boot ALIGN(PAGE_SIZE) : {
         *(.text.boot)
     }
 
-    . += KERNEL_ADDR_OFFSET;
-
-    .text ALIGN(4K) : AT (ADDR(.text) - KERNEL_ADDR_OFFSET) {
+    /* Code sections */
+    .text ALIGN(PAGE_SIZE) : {
         *(.text .text.*)
     }
 
-    .rodata ALIGN(4K) : AT (ADDR(.rodata) - KERNEL_ADDR_OFFSET) {
+    /* Read-only data */
+    .rodata ALIGN(PAGE_SIZE) : {
         *(.rodata .rodata.*)
     }
 
-    .data ALIGN(4K) : AT (ADDR(.data) - KERNEL_ADDR_OFFSET) {
+    /* Global offset table */
+    .got ALIGN(16) : {
+        *(.got)
+        *(.got.plt)
+    }
+
+    /* Initialized data */
+    .data ALIGN(PAGE_SIZE) : {
+        __data_start = .;
         *(.data .data.*)
+        __data_end = .;
     }
 
-    __bss_start = .;
-    .bss ALIGN(4K) : AT (ADDR(.bss) - KERNEL_ADDR_OFFSET) {
+    /* Zero-initialized data */
+    .bss ALIGN(PAGE_SIZE) (NOLOAD) : {
+        __bss_start = .;
+        *(.bss .bss.*)
         *(COMMON)
-        *(.bss)
+        . = ALIGN(PAGE_SIZE);
+        __bss_end = .;
     }
-    __bss_end = .;
 
-    .bss.stack ALIGN(4K) : AT (ADDR(.bss.stack) - KERNEL_ADDR_OFFSET) {
-		    KERNEL_STACK_START = .;
-		    KEEP(*(.bss.stack))
-		    KERNEL_STACK_END = .;
+    /* Heap section */
+    .heap ALIGN(PAGE_SIZE) (NOLOAD) : {
+        __heap_start = .;
+        *(.heap .heap.*)
+        . += HEAP_SIZE;
+        . = ALIGN(PAGE_SIZE);
+        __heap_end = .;
+    }
+
+    /* Stack must be properly aligned for ARM64 */
+    .stack ALIGN(PAGE_SIZE) (NOLOAD) : {
+        . = ALIGN(PAGE_SIZE);
+        __stack_start = .;
+        /**(.stack .stack.*)*/
+        . = . + STACK_SIZE;
+        . = ALIGN(PAGE_SIZE);
+        __stack_end = .;
         stack_top = .;
     }
 
-    KERNEL_VADDR_END = .;
-    KERNEL_PHYSADDR_END = . - KERNEL_ADDR_OFFSET;
-    __STACKSIZE__ = KERNEL_STACK_END - KERNEL_STACK_START;
+    /* Provide symbols needed by kernel */
+    KERNEL_HEAP_START = __heap_start;
+    KERNEL_HEAP_END = __heap_end;
+    KERNEL_STACK_START = __stack_start;
+    KERNEL_STACK_END = __stack_end;
+    KERNEL_VADDR_START = KERNEL_VIRT;
+    KERNEL_VADDR_END = KERNEL_VIRT + (. - KERNEL_BASE);
+    KERNEL_PHYSADDR_START = KERNEL_BASE;
+    KERNEL_PHYSADDR_END = .;
+
+    /* Discard unnecessary sections */
+    /DISCARD/ : {
+        *(.eh_frame*)
+        *(.comment)
+        *(.gnu*)
+        *(.note*)
+        *(.interp)
+        *(.dynsym)
+        *(.dynstr)
+        *(.hash)
+    }
 }

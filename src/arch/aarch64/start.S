@@ -15,7 +15,24 @@ _start:
 
     // ---- Stack Setup ----
 2:  // CPU 0 continues here
-    ldr     x0, =stack_top        // Load address of stack_top (from linker script)
+    // Set up EL1 mode
+    mrs     x0, CurrentEL         // Read current exception level
+    cmp     x0, #(1 << 2)        // Check if we're already at EL1
+    b.eq    3f                    // Skip EL adjustment if we are
+
+    // If we're in EL2, set up EL1
+    mrs     x0, hcr_el2          // Read Hypervisor Configuration Register
+    orr     x0, x0, #(1 << 31)   // Set EL1 execution state to AArch64
+    msr     hcr_el2, x0          // Write back to HCR_EL2
+
+    // Set up SCTLR_EL1
+    mov     x0, #0x0800          // Enable alignment checking
+    movk    x0, #0x30d0, lsl #16 // Standard configuration for EL1
+    msr     sctlr_el1, x0
+
+3:  // Set up the stack
+    ldr     x0, =stack_top        // Load address of stack_top
+    and     x0, x0, #~15          // Ensure 16-byte alignment
     mov     sp, x0                // Set up stack pointer
 
     // ---- Clear BSS Section ----

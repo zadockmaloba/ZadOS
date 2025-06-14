@@ -268,7 +268,7 @@ pub fn initTTY(boot_payload: BootPayload) TTY {
 ///     Allocator.Error.OutOfMemory - There wasn't enough memory in the allocated created to populate the memory profile, consider increasing mem.FIXED_ALLOC_SIZE
 ///
 pub fn initMem(boot_payload: BootPayload) Allocator.Error!MemProfile {
-    log.info("Init\n", .{});
+    log.info("Init memory\n", .{});
     defer log.info("Done\n", .{});
 
     log.debug("KERNEL_ADDR_OFFSET:    0x{X}\n", .{@intFromPtr(&KERNEL_ADDR_OFFSET)});
