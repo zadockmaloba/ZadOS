@@ -85,6 +85,8 @@ pub fn build(b: *std.Build) void {
             "virt",
             "-cpu",
             "cortex-a72",
+            "-m",
+            "256", // Allocate 256MB of RAM
             "-nographic",
             "-kernel",
         };
