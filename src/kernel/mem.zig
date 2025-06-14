@@ -53,10 +53,14 @@ pub const MemProfile = struct {
 };
 
 /// The size of the fixed allocator used before the heap is set up. Set to 1MiB.
-pub var fixed_buffer: [1024 * 1024]u8 = undefined;
+//pub var fixed_buffer: [1024 * 1024]u8 = undefined;
 
 /// The fixed allocator used before the heap is set up.
-pub var fixed_buffer_allocator: std.heap.FixedBufferAllocator = std.heap.FixedBufferAllocator.init(fixed_buffer[0..]);
+//pub var fixed_buffer_allocator: std.heap.FixedBufferAllocator = std.heap.FixedBufferAllocator.init(fixed_buffer[0..]);
+
+pub const FIXED_BUFFER_SIZE = 32 * 1024; // 32KB buffer
+pub var fixed_buffer: [FIXED_BUFFER_SIZE]u8 align(8) = [_]u8{0} ** FIXED_BUFFER_SIZE;
+pub var fixed_buffer_allocator = std.heap.FixedBufferAllocator.init(&fixed_buffer);
 
 /// The kernel's virtual address offset. It's assigned in the init function and this file's tests.
 /// We can't just use KERNEL_ADDR_OFFSET since using externs in the virtToPhys test is broken in
