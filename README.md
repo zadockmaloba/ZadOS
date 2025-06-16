@@ -60,11 +60,7 @@ zig build debug
 - Basic kernel initialization
 - Debugging support via GDB/LLDB
 
-## Memory Map
-
-- Kernel Entry: 0x80000
-- UART: 0x09000000
 
 ## Development
 
-See [debugging.md](debugging.md) for information about debugging the kernel.
+See [debugging.md](docs/debugging.md) for information about debugging the kernel.
