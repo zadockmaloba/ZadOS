@@ -2,6 +2,8 @@
 
 ZadOS is a toy operating system for ARM64 architecture, designed to run on QEMU's virtual machine.
 
+Based on work done by the ZsystemOS/pluto project: https://github.com/ZystemOS/pluto
+
 ## Project Structure
 
 ```
