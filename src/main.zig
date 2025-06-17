@@ -28,9 +28,9 @@ const sys_arch = switch (builtin.cpu.arch) {
 };
 
 pub const std_options: std.Options = .{
-    .enable_segfault_handler = true,
-    .page_size_max = 4096,
-    .page_size_min = 4096,
+    .enable_segfault_handler = false,
+    //.page_size_max = 4096,
+    //.page_size_min = 4096,
     .logFn = custom_log,
 };
 
@@ -71,8 +71,11 @@ export fn kernel_main() callconv(.C) void {
     };
 
     const mem_profile = arch.initMem(boot_payload) catch |e| {
+        uart.simple_print("Failed to initialise memory profile: ");
         panic_root.panic(@errorReturnTrace(), "Failed to initialise memory profile: {}", .{e});
     };
+    uart.simple_print("Memory profile initialised\n");
+    std.log.debug("Memory profile initialised: {any}\n", .{mem_profile});
     var fixed_allocator = mem_profile.fixed_allocator;
 
     pmm.init(&mem_profile, fixed_allocator.allocator());
