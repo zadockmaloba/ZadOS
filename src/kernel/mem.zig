@@ -60,6 +60,7 @@ pub const MemProfile = struct {
 
 pub const FIXED_BUFFER_SIZE = 32 * 1024; // 32KB buffer
 pub var fixed_buffer: [FIXED_BUFFER_SIZE]u8 align(8) = [_]u8{0} ** FIXED_BUFFER_SIZE;
+//pub var aligned_fixed_buffer = std.mem.alignForward(usize, @intFromPtr(&fixed_buffer), 16);
 pub var fixed_buffer_allocator = std.heap.FixedBufferAllocator.init(&fixed_buffer);
 
 /// The kernel's virtual address offset. It's assigned in the init function and this file's tests.
