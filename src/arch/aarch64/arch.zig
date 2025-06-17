@@ -6,6 +6,7 @@ const builtin = @import("builtin");
 const uart = @import("uart.zig");
 const serial = @import("serial.zig");
 const mem = @import("../../kernel/mem.zig");
+const heap = @import("../../kernel/heap.zig");
 const paging = @import("paging.zig");
 const vmm = @import("../../kernel/vmm.zig");
 const keyboard = @import("keyboard.zig");
@@ -15,6 +16,7 @@ const TTY = @import("../../kernel/tty.zig").TTY;
 const Keyboard = @import("../../kernel/keyboard.zig").Keyboard;
 const Task = @import("../../kernel/task.zig").Task;
 const MemProfile = @import("../../kernel/mem.zig").MemProfile;
+const kArrayList = @import("../../kernel/lib/ArrayList.zig").ArrayList;
 
 /// The type of a device.
 pub const Device = struct {}; // ARM64 devices will be defined later
@@ -267,7 +269,7 @@ pub fn initTTY(boot_payload: BootPayload) TTY {
 /// Error: Allocator.Error
 ///     Allocator.Error.OutOfMemory - There wasn't enough memory in the allocated created to populate the memory profile, consider increasing mem.FIXED_ALLOC_SIZE
 ///
-pub fn initMem(boot_payload: BootPayload) Allocator.Error!MemProfile {
+pub fn initMem(boot_payload: BootPayload) !MemProfile {
     log.info("Init memory\n", .{});
     defer log.info("Done\n", .{});
 
@@ -279,9 +281,33 @@ pub fn initMem(boot_payload: BootPayload) Allocator.Error!MemProfile {
     log.debug("KERNEL_PHYSADDR_START: 0x{X}\n", .{@intFromPtr(&KERNEL_PHYSADDR_START)});
     log.debug("KERNEL_PHYSADDR_END:   0x{X}\n", .{@intFromPtr(&KERNEL_PHYSADDR_END)});
 
-    const allocator = mem.fixed_buffer_allocator.allocator();
-    const reserved_physical_mem = std.ArrayList(mem.Range).init(allocator);
-    var reserved_virtual_mem = std.ArrayList(mem.Map).init(allocator);
+    //const allocator = mem.fixed_buffer_allocator.allocator();
+    // Initialize fixed buffer allocator with proper alignment
+    const aligned_buffer_addr = std.mem.alignForward(usize, @intFromPtr(&mem.fixed_buffer), 16);
+    const fixed_buffer_slice = @as([*]u8, @ptrFromInt(aligned_buffer_addr))[0..mem.FIXED_BUFFER_SIZE];
+
+    // Create allocator with pre-aligned buffer
+    log.debug("Using fixed buffer allocator with size: {} bytes\n", .{fixed_buffer_slice.len});
+    var fixed_allocator = heap.FixedBufferAllocator.init(&mem.fixed_buffer);
+    const allocator = fixed_allocator.allocator();
+    log.debug("Fixed buffer allocator initialized\n", .{});
+    //const reserved_physical_mem = std.ArrayList(mem.Range).init(allocator);
+    //var reserved_virtual_mem = std.ArrayList(mem.Map).init(allocator);
+
+    // Pre-allocate ArrayList capacity
+    const reserved_physical_mem = try kArrayList(mem.Range).initCapacity(
+        allocator,
+        16,
+    );
+    //defer reserved_physical_mem.deinit();
+    log.debug("Reserved physical memory list initialized with capacity: {}\n", .{reserved_physical_mem.capacity()});
+
+    var reserved_virtual_mem = try kArrayList(mem.Map).initCapacity(
+        allocator,
+        16,
+    );
+    //defer reserved_virtual_mem.deinit();
+    log.debug("Reserved virtual memory list initialized with capacity: {}\n", .{reserved_virtual_mem.capacity()});
 
     // Map kernel code section
     const kernel_virt = mem.Range{
@@ -320,8 +346,8 @@ pub fn initMem(boot_payload: BootPayload) Allocator.Error!MemProfile {
         .physaddr_start = @as([*]u8, @ptrCast(&KERNEL_PHYSADDR_START)),
         .mem_kb = boot_payload.mem_size / 1024,
         .modules = &[_]mem.Module{},
-        .physical_reserved = reserved_physical_mem.items,
-        .virtual_reserved = reserved_virtual_mem.items,
+        .physical_reserved = reserved_physical_mem.items, //orelse return error.OutOfMemory,
+        .virtual_reserved = reserved_virtual_mem.items, //orelse return error.OutOfMemory,
         .fixed_allocator = mem.fixed_buffer_allocator,
     };
 }
