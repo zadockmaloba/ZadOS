@@ -664,3 +664,182 @@ fn kernel_remap(
     }
     return null;
 }
+
+pub const FixedBufferAllocator = struct {
+    const Error = error{
+        OutOfMemory,
+        InvalidAlignment,
+    };
+
+    /// Each block in the fixed buffer allocator has a header
+    const BlockHeader = packed struct {
+        /// Size of the allocation in bytes (not including header)
+        size: u32,
+        /// Whether the block is currently allocated
+        is_allocated: bool,
+        /// Padding to ensure 8-byte alignment on ARM64
+        _pad: u24,
+        /// Magic number to detect corruption
+        magic: u8,
+    };
+
+    /// Magic value for block headers to detect corruption
+    const BLOCK_MAGIC: u8 = 0xAB;
+    /// Minimum block size that can be allocated
+    const MIN_BLOCK_SIZE: usize = 16;
+
+    /// The underlying memory buffer
+    buffer: []align(8) u8,
+    /// Number of bytes currently allocated
+    allocated_bytes: usize,
+    /// Mutex for thread safety
+    //mutex: std.Thread.Mutex,
+
+    const Self = @This();
+
+    /// Initialize a new FixedBufferAllocator with a given buffer
+    pub fn init(buffer: []align(8) u8) Self {
+        return .{
+            .buffer = buffer,
+            .allocated_bytes = 0,
+            //.mutex = std.Thread.Mutex{},
+        };
+    }
+
+    /// Create an Allocator interface for this FixedBufferAllocator
+    pub fn allocator(self: *Self) Allocator {
+        return Allocator{
+            .ptr = self,
+            .vtable = &.{
+                .alloc = fixed_alloc,
+                .resize = fixed_resize,
+                .free = fixed_free,
+                .remap = fixed_remap,
+            },
+        };
+    }
+
+    /// Implementation of the alloc interface for Allocator
+    fn fixed_alloc(ctx: *anyopaque, len: usize, ptr_align: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
+        _ = ret_addr;
+        _ = ptr_align;
+        const self = @as(*Self, @ptrCast(@alignCast(ctx)));
+
+        //TODO: implement a custom Mutex for this allocator
+        //self.mutex.lock();
+        //defer self.mutex.unlock();
+
+        // Ensure minimum block size and alignment
+        const aligned_size = @max(std.mem.alignForward(usize, len, 8), MIN_BLOCK_SIZE);
+
+        // The total size needed includes the header
+        const total_size = aligned_size + @sizeOf(BlockHeader);
+
+        // Search for a free block
+        var current_offset: usize = 0;
+        while (current_offset < self.buffer.len) {
+            log.debug("Checking block at offset {d}\n", .{current_offset});
+            const header = @as(*BlockHeader, @ptrCast(@alignCast(&self.buffer[current_offset])));
+
+            // Check magic value for corruption
+            //if (header.magic != BLOCK_MAGIC) {
+            //    panic(@errorReturnTrace(), "Heap corruption detected during alloc!\n", .{});
+            //}
+
+            // If this block is free and big enough
+            if (!header.is_allocated and header.size >= aligned_size) {
+                header.* = .{
+                    .size = @as(u32, @intCast(aligned_size)),
+                    .is_allocated = true,
+                    ._pad = 0,
+                    .magic = BLOCK_MAGIC,
+                };
+
+                self.allocated_bytes += total_size;
+
+                // Return aligned pointer to the allocation area
+                return @as([*]u8, @ptrCast(&self.buffer[current_offset + @sizeOf(BlockHeader)]));
+            }
+
+            // Move to next block
+            current_offset += @sizeOf(BlockHeader) + header.size;
+        }
+
+        return null;
+    }
+
+    /// Implementation of the resize interface for Allocator
+    fn fixed_resize(ctx: *anyopaque, buf: []u8, buf_align: std.mem.Alignment, new_len: usize, ret_addr: usize) bool {
+        _ = ctx;
+        _ = buf;
+        _ = buf_align;
+        _ = new_len;
+        _ = ret_addr;
+        // Resizing is not supported in this allocator
+        return false;
+    }
+
+    /// Implementation of the free interface for Allocator
+    fn fixed_free(ctx: *anyopaque, buf: []u8, buf_align: std.mem.Alignment, ret_addr: usize) void {
+        _ = buf_align;
+        _ = ret_addr;
+        const self = @as(*Self, @ptrCast(@alignCast(ctx)));
+
+        //TODO: implement a custom Mutex for this allocator
+        //self.mutex.lock();
+        //defer self.mutex.unlock();
+
+        // Get header for this allocation
+        const header_ptr = @as(*BlockHeader, @ptrCast(@alignCast(&self.buffer[@intFromPtr(buf.ptr) - @sizeOf(BlockHeader) - @intFromPtr(self.buffer.ptr)])));
+
+        // Check magic value for corruption
+        if (header_ptr.magic != BLOCK_MAGIC) {
+            panic(@errorReturnTrace(), "Heap corruption detected during free!\n", .{});
+        }
+
+        // Mark block as free
+        header_ptr.is_allocated = false;
+        self.allocated_bytes -= (header_ptr.size + @sizeOf(BlockHeader));
+    }
+
+    fn fixed_remap(ctx: *anyopaque, buf: []u8, buf_align: std.mem.Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
+        _ = ctx;
+        _ = buf;
+        _ = buf_align;
+        _ = new_len;
+        _ = ret_addr;
+        // Remapping is not supported in this allocator
+        return null;
+    }
+
+    /// Get the current allocation statistics
+    pub fn getStats(self: *Self) struct { total: usize, used: usize, free: usize } {
+        //TODO: implement a custom Mutex for this allocator
+        //self.mutex.lock();
+        //defer self.mutex.unlock();
+
+        return .{
+            .total = self.buffer.len,
+            .used = self.allocated_bytes,
+            .free = self.buffer.len - self.allocated_bytes,
+        };
+    }
+
+    /// Initialize the buffer with initial empty block
+    pub fn reset(self: *Self) void {
+        //TODO: implement a custom Mutex for this allocator
+        //self.mutex.lock();
+        //defer self.mutex.unlock();
+
+        // Create initial empty block spanning entire buffer
+        const header = @as(*BlockHeader, @ptrCast(@alignCast(&self.buffer[0])));
+        header.* = .{
+            .size = @as(u32, @intCast(self.buffer.len - @sizeOf(BlockHeader))),
+            .is_allocated = false,
+            ._pad = 0,
+            .magic = BLOCK_MAGIC,
+        };
+
+        self.allocated_bytes = 0;
+    }
+};
