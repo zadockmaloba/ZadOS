@@ -2,21 +2,123 @@ const std = @import("std");
 const rt = @import("test/runtime_test.zig");
 const TestMode = rt.TestMode;
 
+const SupportedArchitectures = enum {
+    AArch64,
+    RiscV64,
+    X86_64,
+};
+
+const SupportedBoards = enum {
+    Qemu_Virt,
+    RaspberryPi4,
+    RaspberryPi400,
+    Pine64,
+    OdroidN2,
+    OdroidN2Plus,
+    OdroidC4,
+    RockPro64,
+};
+
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
 // runner.
 pub fn build(b: *std.Build) void {
-    // Standard target options allows the person running `zig build` to choose
-    // what target to build for. Here we do not override the defaults, which
-    // means any target is allowed, and the default is native. Other options
-    // for restricting supported target set are available.
-    // Set up for ARM64 bare metal target
+    // Get architecture and board from build options, default to AArch64/Qemu_Virt
+    const arch = b.option(SupportedArchitectures, "arch", "Target architecture (AArch64, RiscV64, X86_64)") orelse .AArch64;
+    const board = b.option(SupportedBoards, "board", "Target board") orelse .Qemu_Virt;
+
+    // Select CPU and board-specific settings
+    var cpu_model: *const std.Target.Cpu.Model = &std.Target.aarch64.cpu.cortex_a72;
+    var cpu_name:[]const u8 = "generic";
+    var qemu_machine:[]const u8 = "virt";
+    var qemu_cpu:[]const u8 = "cortex-a72";
+    var qemu_mem:[]const u8 = "256";
+
+    switch (arch) {
+        .AArch64 => {
+            switch (board) {
+                .Qemu_Virt => {
+                    cpu_model = &std.Target.aarch64.cpu.cortex_a72;
+                    cpu_name = "cortex-a72";
+                    qemu_machine = "virt-9.0";
+                    qemu_cpu = "cortex-a72";
+                    qemu_mem = "256";
+                },
+                .RaspberryPi4 => {
+                    cpu_model = &std.Target.aarch64.cpu.cortex_a72;
+                    cpu_name = "cortex-a72";
+                    qemu_machine = "raspi4b";
+                    qemu_cpu = "cortex-a72";
+                    qemu_mem = "1024";
+                },
+                .RaspberryPi400 => {
+                    cpu_model = &std.Target.aarch64.cpu.cortex_a72;
+                    cpu_name = "cortex-a72";
+                    qemu_machine = "raspi4b";
+                    qemu_cpu = "cortex-a72";
+                    qemu_mem = "1024";
+                },
+                .Pine64 => {
+                    cpu_model = &std.Target.aarch64.cpu.cortex_a53;
+                    cpu_name = "cortex-a53";
+                    qemu_machine = "virt";
+                    qemu_cpu = "cortex-a53";
+                    qemu_mem = "1024";
+                },
+                .RockPro64 => {
+                    cpu_model = &std.Target.aarch64.cpu.cortex_a53;
+                    cpu_name = "cortex-a53";
+                    qemu_machine = "virt";
+                    qemu_cpu = "cortex-a53";
+                    qemu_mem = "1024";
+                },
+                .OdroidN2 => {
+                    cpu_model = &std.Target.aarch64.cpu.cortex_a73;
+                    cpu_name = "cortex-a73";
+                    qemu_machine = "virt";
+                    qemu_cpu = "cortex-a73";
+                    qemu_mem = "4096";
+                },
+                .OdroidN2Plus => {
+                    cpu_model = &std.Target.aarch64.cpu.cortex_a73;
+                    cpu_name = "cortex-a73";
+                    qemu_machine = "virt";
+                    qemu_cpu = "cortex-a73";
+                    qemu_mem = "4096";
+                },
+                .OdroidC4 => {
+                    cpu_model = &std.Target.aarch64.cpu.cortex_a73;
+                    cpu_name = "cortex-a73";
+                    qemu_machine = "virt";
+                    qemu_cpu = "cortex-a73";
+                    qemu_mem = "4096";
+                },
+            }
+        },
+        .RiscV64 => {
+            cpu_name = "generic-rv64";
+            qemu_machine = "virt";
+            qemu_cpu = "rv64";
+            qemu_mem = "256";
+        },
+        .X86_64 => {
+            cpu_name = "x86_64";
+            qemu_machine = "pc";
+            qemu_cpu = "qemu64";
+            qemu_mem = "256";
+        },
+    }
+
     const target = b.standardTargetOptions(.{
         .default_target = .{
-            .cpu_arch = .aarch64,
+            .cpu_arch = switch (arch) {
+                .AArch64 => .aarch64,
+                .RiscV64 => .riscv64,
+                .X86_64 => .x86_64,
+            },
             .os_tag = .freestanding,
             .abi = .gnueabi,
-            .cpu_model = .{ .explicit = &std.Target.aarch64.cpu.cortex_a72 },
+            .cpu_model = .{ .explicit = cpu_model },
         },
     });
 
@@ -77,29 +179,31 @@ pub fn build(b: *std.Build) void {
         run_cmd.addArgs(args);
     }
 
-    // Common QEMU settings
-    const QemuArgs = struct {
-        pub const normal: []const []const u8 = &[_][]const u8{
-            "qemu-system-aarch64",
-            "-machine",
-            "virt",
-            "-cpu",
-            "cortex-a72",
-            "-m",
-            "256", // Allocate 256MB of RAM
-            "-nographic",
-            "-kernel",
-        };
-        pub const debug: []const []const u8 = &[_][]const u8{
-            "-S", // Start CPU halted
-            "-gdb", "tcp::1234", // Listen for GDB connection on port 1234
-        };
-    };
+    // QEMU command line is now board/arch dependent
+    // Remove QemuArgs struct (if present)
 
     // Create normal QEMU run step
+    const qemu_bin = std.fmt.allocPrint(b.allocator, "qemu-system-{s}", .{
+        switch (arch) {
+            .AArch64 => "aarch64",
+            .RiscV64 => "riscv64",
+            .X86_64 => "x86_64",
+        }}) catch unreachable;
+    defer b.allocator.free(qemu_bin);
+
     var qemu_cmd = std.ArrayList([]const u8).init(b.allocator);
     defer qemu_cmd.deinit();
-    qemu_cmd.appendSlice(QemuArgs.normal) catch unreachable;
+    qemu_cmd.append(qemu_bin) catch unreachable;
+    qemu_cmd.append("-machine") catch unreachable;
+    qemu_cmd.append(qemu_machine) catch unreachable;
+    qemu_cmd.append("-cpu") catch unreachable;
+    qemu_cmd.append(qemu_cpu) catch unreachable;
+    qemu_cmd.append("-smp") catch unreachable;
+    qemu_cmd.append("4") catch unreachable;
+    qemu_cmd.append("-m") catch unreachable;
+    qemu_cmd.append(qemu_mem) catch unreachable;
+    qemu_cmd.append("-nographic") catch unreachable;
+    qemu_cmd.append("-kernel") catch unreachable;
     qemu_cmd.append(b.getInstallPath(.bin, "ZadOS")) catch unreachable;
 
     const qemu = b.addSystemCommand(qemu_cmd.items);
@@ -108,9 +212,12 @@ pub fn build(b: *std.Build) void {
     // Create debug QEMU run step
     var qemu_debug_cmd = std.ArrayList([]const u8).init(b.allocator);
     defer qemu_debug_cmd.deinit();
-    qemu_debug_cmd.appendSlice(QemuArgs.normal) catch unreachable;
-    qemu_debug_cmd.append(b.getInstallPath(.bin, "ZadOS")) catch unreachable;
-    qemu_debug_cmd.appendSlice(QemuArgs.debug) catch unreachable;
+    for (qemu_cmd.items) |arg| {
+        qemu_debug_cmd.append(arg) catch unreachable;
+    }
+    qemu_debug_cmd.append("-S") catch unreachable;
+    qemu_debug_cmd.append("-gdb") catch unreachable;
+    qemu_debug_cmd.append("tcp::1234") catch unreachable;
 
     const qemu_debug = b.addSystemCommand(qemu_debug_cmd.items);
     std.log.info("QEMU debug command: {s}", .{qemu_debug_cmd.items});
