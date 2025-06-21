@@ -1,114 +1,144 @@
+/* ARM64 Kernel Linker Script - Cortex-A72/QEMU virt style
+ * Inspired by SEGGER .icf layout
+ */
+
 ENTRY(_start)
 
-/* Memory layout constants */
-KERNEL_BASE = 0x40080000;           /* Physical load address */
-KERNEL_VIRT = 0xFFFF000040080000;   /* Virtual address when MMU enabled */
-PAGE_SIZE = 0x1000;                 /* 4KB pages */
-STACK_SIZE = 0x20000;               /* 128KB stack */
-HEAP_SIZE = 0x100000;               /* 1MB heap */
+/* ---- Memory Layout Constants ---- */
 KERNEL_ADDR_OFFSET = 0x00;
+KERNEL_BASE      = 0x40080000;           /* Physical load address */
+KERNEL_VIRT      = 0xFFFF000040080000;   /* Virtual address when MMU enabled */
+PAGE_SIZE        = 0x1000;               /* 4KB pages */
+HEAP_SIZE        = 0x100000;             /* 1MB heap */
+STACK_SIZE       = 0x8000;               /* 32KB stack */
+STACK_SIZE_ABT   = 0x1000;
+STACK_SIZE_FIQ   = 0x1000;
+STACK_SIZE_UND   = 0x1000;
+STACK_SIZE_IRQ   = 0x1000;
+STACK_SIZE_SVC   = 0x1000;
 
-SECTIONS {
+SECTIONS
+{
     . = KERNEL_BASE;
 
-    /* Boot code must be first and at physical address */
+    /* ---- Exception Vector Table ---- */
+    .vectors ALIGN(PAGE_SIZE) : {
+        KEEP(*(.vectors))
+    }
+
+    /* ---- Boot Code ---- */
     .text.boot ALIGN(PAGE_SIZE) : {
         *(.text.boot)
     }
 
-    /* Code sections */
+    /* ---- Main Executable Code ---- */
     .text ALIGN(PAGE_SIZE) : {
-        *(.text .text.*);
+        *(.text .text.*)
     }
 
-    /* Read-only data */
+    /* ---- Read-Only Data ---- */
     .rodata ALIGN(PAGE_SIZE) : {
-        *(.rodata .rodata.*);
+        *(.rodata .rodata.*)
     }
 
-    /* Global offset table */
-    .got ALIGN(16) : {
-        *(.got);
-        *(.got.plt);
+    /* ---- ARM Exception Unwind ---- */
+    .ARM.exidx ALIGN(8) : {
+        *(.ARM.exidx*)
     }
 
-    /* Initialized data */
+    /* ---- Constructors/Destructors ---- */
+    .ctors ALIGN(8) : {
+        KEEP(*(.ctors*))
+        KEEP(*(SORT(.init_array.*)))
+        KEEP(*(.init_array))
+    }
+    .dtors ALIGN(8) : {
+        KEEP(*(.dtors*))
+        KEEP(*(SORT(.fini_array.*)))
+        KEEP(*(.fini_array))
+    }
+
+    /* ---- Thread-Local Storage ---- */
+    .tdata ALIGN(8) : {
+        *(.tdata .tdata.*)
+    }
+    .tbss ALIGN(8) : {
+        *(.tbss .tbss.*)
+    }
+
+    /* ---- Initialized Data ---- */
     .data ALIGN(PAGE_SIZE) : {
         __data_start = .;
-        *(.data .data.*);
+        *(.data .data.*)
         __data_end = .;
     }
 
-    /* Zero-initialized data */
+    /* ---- Uninitialized Data ---- */
     .bss ALIGN(PAGE_SIZE) (NOLOAD) : {
         __bss_start = .;
-        *(.bss .bss.*);
-        *(.lbss);
-        *(.lbss.*);
+        *(.bss .bss.*)
         *(COMMON)
-        . = ALIGN(PAGE_SIZE);
         __bss_end = .;
     }
 
-    /* Heap section */
-    /*.heap ALIGN(PAGE_SIZE) (NOLOAD) : {
+    /* ---- Heap ---- */
+    .heap ALIGN(8) (NOLOAD) : {
         __heap_start = .;
-        *(.heap .heap.*);
         . += HEAP_SIZE;
-        . = ALIGN(PAGE_SIZE);
         __heap_end = .;
-    }*/
-
-    .kernel_heap ALIGN(PAGE_SIZE) (NOLOAD) : {
-      __kernel_heap_start = .;
-      *(.kernel_heap .kernel_heap.*);
-      . += HEAP_SIZE;
-      . = ALIGN(PAGE_SIZE);
-      __kernel_heap_end = .;
     }
 
-    .kernel_stack ALIGN(PAGE_SIZE) (NOLOAD) : {
-      __kernel_stack_start = .;
-      /**(.kernel_stack .kernel_stack.*)*/
-      . += STACK_SIZE;
-      . = ALIGN(PAGE_SIZE);
-      __kernel_stack_end = .;
+    /* ---- Mode-specific Stacks ---- */
+    .stack_abt ALIGN(8) (NOLOAD) : {
+        __stack_abt_start = .;
+        . += STACK_SIZE_ABT;
+        __stack_abt_end = .;
+    }
+    .stack_fiq ALIGN(8) (NOLOAD) : {
+        __stack_fiq_start = .;
+        . += STACK_SIZE_FIQ;
+        __stack_fiq_end = .;
+    }
+    .stack_und ALIGN(8) (NOLOAD) : {
+        __stack_und_start = .;
+        . += STACK_SIZE_UND;
+        __stack_und_end = .;
+    }
+    .stack_irq ALIGN(8) (NOLOAD) : {
+        __stack_irq_start = .;
+        . += STACK_SIZE_IRQ;
+        __stack_irq_end = .;
+    }
+    .stack_svc ALIGN(8) (NOLOAD) : {
+        __stack_svc_start = .;
+        . += STACK_SIZE_SVC;
+        __stack_svc_end = .;
     }
 
-    /* Stack must be properly aligned for ARM64 */
-    .stack ALIGN(PAGE_SIZE) (NOLOAD) : {
-        . = ALIGN(PAGE_SIZE);
+    /* ---- Main Stack (at end of RAM region) ---- */
+    .stack ALIGN(16) (NOLOAD) : {
         __stack_start = .;
-        /**(.stack .stack.*)*/
-        . = . + STACK_SIZE;
-        . = ALIGN(PAGE_SIZE);
+        . += STACK_SIZE;
         __stack_end = .;
         stack_top = .;
     }
 
-    /* Provide symbols needed by kernel */
-    /*KERNEL_HEAP_START = __heap_start;
-    KERNEL_HEAP_END = __heap_end;*/
-    KERNEL_TMP_STACK_START = __kernel_stack_start;
-    KERNEL_TMP_STACK_END = __kernel_stack_end;
+    /* ---- Exported Symbols ---- */
     KERNEL_STACK_START = __stack_start;
-    KERNEL_STACK_END = __stack_end;
+    KERNEL_STACK_END   = __stack_end;
+    KERNEL_HEAP_START  = __heap_start;
+    KERNEL_HEAP_END    = __heap_end;
     KERNEL_VADDR_START = KERNEL_VIRT;
-    KERNEL_VADDR_END = KERNEL_VIRT + (. - KERNEL_BASE);
+    KERNEL_VADDR_END   = KERNEL_VIRT + (. - KERNEL_BASE);
     KERNEL_PHYSADDR_START = KERNEL_BASE;
-    KERNEL_PHYSADDR_END = .;
+    KERNEL_PHYSADDR_END   = .;
 
-    /* Discard unnecessary sections */
+    /* ---- Discard Unused Sections ---- */
     /DISCARD/ : {
-        *(*.eh_frame);
-        *(*.eh_frame_hdr);
-        /**(.eh_frame*)
         *(.comment)
         *(.gnu*)
         *(.note*)
-        *(.interp)
-        *(.dynsym)
-        *(.dynstr)
-        *(.hash)*/
+        *(.eh_frame*)
+        *(.debug*)
     }
 }
