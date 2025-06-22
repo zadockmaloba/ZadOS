@@ -29,10 +29,10 @@ pub fn build(b: *std.Build) void {
 
     // Select CPU and board-specific settings
     var cpu_model: *const std.Target.Cpu.Model = &std.Target.aarch64.cpu.cortex_a72;
-    var cpu_name:[]const u8 = "generic";
-    var qemu_machine:[]const u8 = "virt";
-    var qemu_cpu:[]const u8 = "cortex-a72";
-    var qemu_mem:[]const u8 = "256";
+    var cpu_name: []const u8 = "generic";
+    var qemu_machine: []const u8 = "virt";
+    var qemu_cpu: []const u8 = "cortex-a72";
+    var qemu_mem: []const u8 = "256";
 
     switch (arch) {
         .AArch64 => {
@@ -149,6 +149,8 @@ pub fn build(b: *std.Build) void {
 
     const exe_options = b.addOptions();
     exe_options.addOption(TestMode, "test_mode", test_mode);
+    exe_options.addOption(SupportedArchitectures, "target_arch", arch);
+    exe_options.addOption(SupportedBoards, "target_board", board);
     exe_mod.addOptions("build_options", exe_options);
 
     // Add assembly file
@@ -183,12 +185,11 @@ pub fn build(b: *std.Build) void {
     // Remove QemuArgs struct (if present)
 
     // Create normal QEMU run step
-    const qemu_bin = std.fmt.allocPrint(b.allocator, "qemu-system-{s}", .{
-        switch (arch) {
-            .AArch64 => "aarch64",
-            .RiscV64 => "riscv64",
-            .X86_64 => "x86_64",
-        }}) catch unreachable;
+    const qemu_bin = std.fmt.allocPrint(b.allocator, "qemu-system-{s}", .{switch (arch) {
+        .AArch64 => "aarch64",
+        .RiscV64 => "riscv64",
+        .X86_64 => "x86_64",
+    }}) catch unreachable;
     defer b.allocator.free(qemu_bin);
 
     var qemu_cmd = std.ArrayList([]const u8).init(b.allocator);
@@ -198,13 +199,17 @@ pub fn build(b: *std.Build) void {
     qemu_cmd.append(qemu_machine) catch unreachable;
     qemu_cmd.append("-cpu") catch unreachable;
     qemu_cmd.append(qemu_cpu) catch unreachable;
-    qemu_cmd.append("-smp") catch unreachable;
-    qemu_cmd.append("4") catch unreachable;
+    //qemu_cmd.append("-smp") catch unreachable;
+    //qemu_cmd.append("4") catch unreachable;
     qemu_cmd.append("-m") catch unreachable;
     qemu_cmd.append(qemu_mem) catch unreachable;
     qemu_cmd.append("-nographic") catch unreachable;
-    qemu_cmd.append("-kernel") catch unreachable;
-    qemu_cmd.append(b.getInstallPath(.bin, "ZadOS")) catch unreachable;
+    //qemu_cmd.append("-kernel") catch unreachable;
+    const loader_arg = std.fmt.allocPrint(b.allocator, "loader,addr=0x40200000,cpu-num=0,file={s}", .{b.getInstallPath(.bin, "ZadOS")}) catch unreachable;
+    defer b.allocator.free(loader_arg);
+    qemu_cmd.append("-device") catch unreachable;
+    qemu_cmd.append(loader_arg) catch unreachable;
+    //qemu_cmd.append("-device loader,addr=0x40800000,cpu-num=0,file=" ++ b.getInstallPath(.bin, "ZadOS")) catch unreachable;
 
     const qemu = b.addSystemCommand(qemu_cmd.items);
     qemu.step.dependOn(b.getInstallStep());
@@ -215,6 +220,7 @@ pub fn build(b: *std.Build) void {
     for (qemu_cmd.items) |arg| {
         qemu_debug_cmd.append(arg) catch unreachable;
     }
+    qemu_debug_cmd.append("-s") catch unreachable;
     qemu_debug_cmd.append("-S") catch unreachable;
     qemu_debug_cmd.append("-gdb") catch unreachable;
     qemu_debug_cmd.append("tcp::1234") catch unreachable;
