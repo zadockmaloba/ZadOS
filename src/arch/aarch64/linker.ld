@@ -6,11 +6,12 @@ ENTRY(_start)
 
 /* ---- Memory Layout Constants ---- */
 KERNEL_ADDR_OFFSET = 0x00;
-KERNEL_BASE      = 0x40080000;           /* Physical load address */
+/*KERNEL_BASE      = 0x40080000;*/           /* Physical load address */
+KERNEL_BASE = 0x40200000;
 KERNEL_VIRT      = 0xFFFF000040080000;   /* Virtual address when MMU enabled */
 PAGE_SIZE        = 0x1000;               /* 4KB pages */
 HEAP_SIZE        = 0x100000;             /* 1MB heap */
-STACK_SIZE       = 0x8000;               /* 32KB stack */
+/*KERNEL_STACK_SIZE = 16 * 1024 * 1024;*/               /* 16MB stack */
 STACK_SIZE_ABT   = 0x1000;
 STACK_SIZE_FIQ   = 0x1000;
 STACK_SIZE_UND   = 0x1000;
@@ -79,6 +80,7 @@ SECTIONS
         *(.bss .bss.*)
         *(COMMON)
         __bss_end = .;
+        __bss_size = __bss_end - __bss_start;
     }
 
     /* ---- Heap ---- */
@@ -118,10 +120,10 @@ SECTIONS
     /* ---- Main Stack (at end of RAM region) ---- */
     .stack ALIGN(16) (NOLOAD) : {
         __stack_start = .;
-        . += STACK_SIZE;
-        __stack_end = .;
-        stack_top = .;
+        /*. += KERNEL_STACK_SIZE;*/ 
     }
+    __stack_end = .;
+    stack_top = .;
 
     /* ---- Exported Symbols ---- */
     KERNEL_STACK_START = __stack_start;
