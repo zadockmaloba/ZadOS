@@ -28,17 +28,17 @@ SECTIONS
     }
 
     /* ---- Boot Code ---- */
-    .text.boot ALIGN(PAGE_SIZE) : {
+    .text.boot /*ALIGN(PAGE_SIZE)*/ : {
         *(.text.boot)
     }
 
     /* ---- Main Executable Code ---- */
-    .text ALIGN(PAGE_SIZE) : {
+    .text /*ALIGN(PAGE_SIZE)*/ : {
         *(.text .text.*)
     }
 
     /* ---- Read-Only Data ---- */
-    .rodata ALIGN(PAGE_SIZE) : {
+    .rodata /*ALIGN(PAGE_SIZE)*/ : {
         *(.rodata .rodata.*)
     }
 
@@ -68,16 +68,16 @@ SECTIONS
     }
 
     /* ---- Initialized Data ---- */
-    .data ALIGN(PAGE_SIZE) : {
+    .data /*ALIGN(PAGE_SIZE)*/ : {
         __data_start = .;
         *(.data .data.*)
         __data_end = .;
     }
 
     /* ---- Uninitialized Data ---- */
-    .bss ALIGN(PAGE_SIZE) (NOLOAD) : {
+    .bss /*ALIGN(PAGE_SIZE) (NOLOAD)*/ : {
         __bss_start = .;
-        *(.bss .bss.*)
+        *(.bss*)
         *(COMMON)
         __bss_end = .;
         __bss_size = __bss_end - __bss_start;
@@ -120,6 +120,7 @@ SECTIONS
     /* ---- Main Stack (at end of RAM region) ---- */
     .stack ALIGN(16) (NOLOAD) : {
         __stack_start = .;
+        KEEP(*(.stack*))
         /*. += KERNEL_STACK_SIZE;*/ 
     }
     __stack_end = .;
@@ -140,7 +141,7 @@ SECTIONS
         *(.comment)
         *(.gnu*)
         *(.note*)
-        *(.eh_frame*)
-        *(.debug*)
+        /**(.eh_frame*)*/
+        /**(.debug*)*/
     }
 }
