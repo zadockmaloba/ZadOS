@@ -3,6 +3,7 @@
 //! commonly found in ARM platforms and QEMU.
 
 const std = @import("std");
+const arch = @import("arch.zig");
 
 //For simple UART operations without configuration
 pub fn simple_putc(c: u8) void {
@@ -77,7 +78,7 @@ pub const Uart = struct {
     const Self = @This();
 
     /// Initialize UART with the given configuration
-    pub fn init(self: *Self) void {
+    pub fn init(self: Self) void {
         // Disable UART before configuration
         self.writeReg(Register.CR, 0);
 
@@ -101,7 +102,7 @@ pub const Uart = struct {
     }
 
     /// Write a single byte to UART
-    pub fn writeByte(self: *Self, byte: u8) Error!void {
+    pub fn writeByte(self: Self, byte: u8) Error!void {
         // Wait until UART is ready to transmit
         while ((self.readReg(Register.FR) & FR_TXFF) != 0) {
             if ((self.readReg(Register.FR) & FR_BUSY) != 0) {
@@ -114,7 +115,7 @@ pub const Uart = struct {
     }
 
     /// Read a single byte from UART
-    pub fn readByte(self: *Self) Error!u8 {
+    pub fn readByte(self: Self) Error!u8 {
         // Check if receive FIFO is empty
         if ((self.readReg(Register.FR) & FR_RXFE) != 0) {
             return Error.BufferEmpty;
@@ -124,22 +125,79 @@ pub const Uart = struct {
     }
 
     /// Write a string to UART
-    pub fn writeString(self: *Self, str: []const u8) Error!void {
+    pub fn writeString(self: Self, str: []const u8) Error!void {
         for (str) |byte| {
             try self.writeByte(byte);
         }
     }
 
     /// Helper function to read a register
-    inline fn readReg(self: *const Self, reg: u32) u32 {
+    inline fn readReg(self: Self, reg: u32) u32 {
         const ptr = @as(*volatile u32, @ptrFromInt(self.base_addr + reg));
         return ptr.*;
     }
 
     /// Helper function to write a register
-    inline fn writeReg(self: *const Self, reg: u32, value: u32) void {
+    inline fn writeReg(self: Self, reg: u32, value: u32) void {
         const ptr = @as(*volatile u32, @ptrFromInt(self.base_addr + reg));
         ptr.* = value;
+    }
+};
+
+pub const UartWriter = struct {
+    uart: Uart,
+    /// If this has length zero, the writer is unbuffered, and `flush` is a no-op.
+    buffer: []u8 = undefined,
+    /// In `buffer` before this are buffered bytes, after this is `undefined`.
+    end: usize = 0,
+    var panicked: bool = false;
+
+    ///lock to avoid interleaving concurrent prinrf's.
+    //var lock: SpinLock = undefined;
+    var lock_allowed_to_use: bool = true;
+
+    const Self = @This();
+    pub const Error = error{
+        Busy,
+        BufferFull,
+        BufferEmpty,
+    };
+
+    pub fn init(uart: Uart, buffer: []u8) UartWriter {
+        _ = buffer; // Prevent unused variable warning
+        return .{
+            .uart = uart,
+            //.buffer = buffer,
+            .end = 0,
+        };
+    }
+    pub fn write(self: UartWriter, bytes: []const u8) UartWriter.Error!usize {
+        var total_written: usize = 0;
+        for (bytes) |byte| {
+            try self.uart.writeByte(byte);
+            total_written += 1;
+        }
+        return total_written;
+    }
+    pub fn writeAll(self: UartWriter, bytes: []const u8) UartWriter.Error!void {
+        _ = try self.write(bytes);
+    }
+    pub fn writeByte(self: UartWriter, byte: u8) UartWriter.Error!void {
+        try self.uart.writeByte(byte);
+    }
+    pub fn writeByteNTimes(self: UartWriter, byte: u8, n: usize) UartWriter.Error!void {
+        for (0..n) |_| {
+            try self.uart.writeByte(byte);
+        }
+    }
+    pub fn writeBytesNTimes(self: UartWriter, bytes: []const u8, n: usize) UartWriter.Error!void {
+        for (0..n) |_| {
+            try self.writeAll(bytes);
+        }
+    }
+    pub fn flush(self: UartWriter) !void {
+        // No-op for UART, as it is synchronous
+        _ = self; // Avoid unused variable warning
     }
 };
 
@@ -169,19 +227,17 @@ pub fn print(str: []const u8) Error!void {
     return uart0.writeString(str);
 }
 
+const PRINT_BUFFER_SIZE = 5;
+pub var print_buf: [PRINT_BUFFER_SIZE]u8 = undefined;
 /// Write a formatted string to UART
-pub fn printf(comptime format: []const u8, args: anytype) Error!void {
+pub fn printf(comptime format: []const u8, args: anytype) !void {
     // Much larger buffer to handle most format strings
-    var buf: [256]u8 = [_]u8{0} ** 256;
+    // const PRINT_BUFFER_SIZE = 1024;
+    // const print_buf = try arch.KernelStackAllocator.alloc(u8, PRINT_BUFFER_SIZE);
+    // defer arch.KernelStackAllocator.free(print_buf);
 
-    // Format the string using std.fmt.bufPrint (not bufPrintZ since we don't need null termination)
-    const str = std.fmt.bufPrint(&buf, format, args) catch {
-        try uart0.writeString("Error: Format buffer overflow\n");
-        return Error.BufferFull;
-    };
-
-    // Write the formatted string using the UART driver
-    try uart0.writeString(str);
+    const writer = UartWriter.init(uart0, &print_buf);
+    try std.fmt.format(writer, format, args);
 }
 
 pub fn setCursor(_: u8, _: u8) void {

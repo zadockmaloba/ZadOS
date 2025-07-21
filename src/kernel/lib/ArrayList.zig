@@ -13,9 +13,11 @@ extern var KERNEL_TMP_STACK_END: *u64;
 pub fn ArrayList(comptime T: type) type {
     return struct {
         /// Items stored in the list
-        items: []T,
+        items: ?[*]T,
         /// Number of items currently in the list
         len: usize,
+        /// Track allocations for debugging
+        _allocations: usize,
         /// The allocator used for managing memory
         allocator: Allocator,
 
@@ -27,13 +29,17 @@ pub fn ArrayList(comptime T: type) type {
             CapacityOverflow,
         };
 
+        pub fn itemsSlice(self: Self) []T {
+            return if (self.items) |ptr| ptr[0..self._allocations] else @panic("ArrayList: items slice is null");
+        }
+
         /// Initialize a new ArrayList with the given allocator
         pub fn init(allocator: Allocator) Self {
+            //const tmp: [10]T = undefined;
             return .{
-                .items = allocator.alloc(T, 1) catch {
-                    @panic("ArrayList: Out of memory during initialization");
-                }, //@as([*]align(@alignOf(T)) T, @ptrCast(&KERNEL_TMP_STACK_START))[0..10],
+                .items = null, //@as([*]align(@alignOf(T)) T, @ptrCast(&KERNEL_TMP_STACK_START))[0..10],
                 .len = 0,
+                ._allocations = 0,
                 .allocator = allocator,
             };
         }
@@ -51,13 +57,15 @@ pub fn ArrayList(comptime T: type) type {
         pub fn deinit(self: *Self) void {
             if (self.items.len == 0) return;
             self.allocator.free(self.items);
-            self.items = &[_]T{}; //@as([*]align(@alignOf(T)) T, @ptrFromInt(0))[0..0];
+            self.items = null; //@as([*]align(@alignOf(T)) T, @ptrFromInt(0))[0..0];
             self.len = 0;
+            self._allocations = 0;
         }
 
         /// Current capacity of the list
         pub fn capacity(self: Self) usize {
-            return self.items.len;
+            //if (self.items == null) return 0;
+            return self._allocations;
         }
 
         /// Ensure total capacity in the list
@@ -79,13 +87,17 @@ pub fn ArrayList(comptime T: type) type {
             if (new_capacity <= self.capacity()) return;
 
             const new_items = try self.allocator.alloc(T, new_capacity);
-            @memcpy(new_items[0..self.len], self.items[0..self.len]);
+            self._allocations += new_capacity;
+            log.debug("ArrayList: reallocating from {} to {}\n", .{ self.capacity(), new_capacity });
 
-            if (self.items.len != 0) {
-                self.allocator.free(self.items);
+            if (self.items != null) {
+                log.debug("ArrayList: copying {} items to new allocation\n", .{self.len});
+                @memcpy(new_items[0..self.len], self.itemsSlice());
+                log.debug("ArrayList: freeing old allocation\n", .{});
+                self.allocator.free(self.itemsSlice());
             }
 
-            self.items = new_items;
+            self.items = @as([*]T, @ptrCast(@alignCast(new_items.ptr)));
         }
 
         /// Append a single item
@@ -96,7 +108,7 @@ pub fn ArrayList(comptime T: type) type {
 
         /// Append assuming we have capacity
         pub fn appendAssumeCapacity(self: *Self, item: T) void {
-            self.items[self.len] = item;
+            self.itemsSlice()[self.len] = item;
             self.len += 1;
         }
 
@@ -115,7 +127,7 @@ pub fn ArrayList(comptime T: type) type {
         /// Remove and return the last element
         pub fn pop(self: *Self) T {
             self.len -= 1;
-            return self.items[self.len];
+            return self.itemsSlice()[self.len];
         }
 
         /// Remove and return the last element, or null if empty

@@ -20,6 +20,7 @@ const initrd = @import("kernel/filesystem/initrd.zig");
 const keyboard = @import("kernel/keyboard.zig");
 const syscalls = @import("kernel/syscalls.zig");
 const uart = @import("arch/aarch64/uart.zig");
+const dtb = @import("arch/aarch64/dtb.zig");
 const Allocator = std.mem.Allocator;
 
 const sys_arch = switch (builtin.cpu.arch) {
@@ -28,9 +29,9 @@ const sys_arch = switch (builtin.cpu.arch) {
 };
 
 pub const std_options: std.Options = .{
-    .enable_segfault_handler = false,
-    //.page_size_max = 4096,
-    //.page_size_min = 4096,
+    .enable_segfault_handler = true,
+    .page_size_max = 4096,
+    .page_size_min = 256,
     .logFn = custom_log,
 };
 
@@ -57,17 +58,34 @@ var kernel_heap: heap.FreeListAllocator = undefined;
 // This is our kernel entry point called from start.S
 export fn kernel_main() callconv(.C) void {
     // Initialize UART
-    //uart.init();
+    uart.init();
 
     //var elems: [256]u8 align(16) = [_]u8{0} ** 256;
     //elems[0] = 0; // Prevent unused variable warning
-
-    uart.simple_print("ZadOS is booting...\n");
-
     log_root.init();
+    //_ = dtb;
+
+    std.log.debug("hello world {any}\n", .{kernel_heap}); 
+
+    const dtb_ptr: u64 align(32) = 0x4000_0000;
+    //dtb_ptr += 0; // Prevent unused variable warning
+    std.log.debug("Test print buffer: The quick brown fox jumped over the lazy dog. \n The quick brown fox jumped over the lazy dog {any}\n", .{3});
+
+    //std.log.debug("ZadOS is booting. DTB: {any} \n", .{dtb_ptr});
+    if (dtb_ptr > 0) {
+        const header = dtb.readDtbHeader(dtb_ptr);
+
+        if (header.isValid()) {
+            std.log.info("Found valid DTB! Size: {d} bytes\n", .{std.mem.bigToNative(u32, header.totalsize)});
+            std.log.info("DTB Header: {any}\n", .{dtb.readDtbHeader(dtb_ptr).*});
+        } else {
+            std.log.err("Invalid DTB magic!\n", .{});
+        }
+    }
+
     const boot_payload = arch.BootPayload{
         .mem_size = 512 * 1024 * 1024,
-        .dtb_ptr = 0,
+        .dtb_ptr = dtb_ptr,
     };
 
     const mem_profile = arch.initMem(boot_payload) catch |e| {

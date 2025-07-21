@@ -33,16 +33,27 @@ pub fn build(b: *std.Build) void {
     var qemu_machine: []const u8 = "virt";
     var qemu_cpu: []const u8 = "cortex-a72";
     var qemu_mem: []const u8 = "256";
+    // Set CPU model and QEMU parameters based on architecture and board
+
+    var disabled_features = std.Target.Cpu.Feature.Set.empty;
 
     switch (arch) {
         .AArch64 => {
+            const features = std.Target.aarch64.Feature;
+            disabled_features = std.Target.aarch64.featureSet(&.{
+                features.fp_armv8, // Disable floating point support
+                features.neon, // Disable NEON support
+                features.crypto, // Disable crypto extensions
+                features.fullfp16,
+            });
             switch (board) {
                 .Qemu_Virt => {
                     cpu_model = &std.Target.aarch64.cpu.cortex_a72;
                     cpu_name = "cortex-a72";
-                    qemu_machine = "virt-9.0";
+                    //Ref: https://docs.u-boot.org/en/latest/develop/devicetree/dt_qemu.html#obtaining-the-qemu-devicetree
+                    qemu_machine = "virt";
                     qemu_cpu = "cortex-a72";
-                    qemu_mem = "256";
+                    qemu_mem = "1G";
                 },
                 .RaspberryPi4 => {
                     cpu_model = &std.Target.aarch64.cpu.cortex_a72;
@@ -117,8 +128,9 @@ pub fn build(b: *std.Build) void {
                 .X86_64 => .x86_64,
             },
             .os_tag = .freestanding,
-            .abi = .gnueabi,
+            .abi = .none,
             .cpu_model = .{ .explicit = cpu_model },
+            .cpu_features_sub = disabled_features,
         },
     });
 
@@ -158,6 +170,8 @@ pub fn build(b: *std.Build) void {
 
     // Set linker script
     exe.setLinkerScript(b.path("src/arch/aarch64/linker.ld"));
+
+    exe.stack_size = 0x1000_000; // 1 MiB stack size
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
@@ -199,17 +213,17 @@ pub fn build(b: *std.Build) void {
     qemu_cmd.append(qemu_machine) catch unreachable;
     qemu_cmd.append("-cpu") catch unreachable;
     qemu_cmd.append(qemu_cpu) catch unreachable;
-    //qemu_cmd.append("-smp") catch unreachable;
-    //qemu_cmd.append("4") catch unreachable;
+    qemu_cmd.append("-smp") catch unreachable;
+    qemu_cmd.append("4") catch unreachable;
     qemu_cmd.append("-m") catch unreachable;
     qemu_cmd.append(qemu_mem) catch unreachable;
     qemu_cmd.append("-nographic") catch unreachable;
-    //qemu_cmd.append("-kernel") catch unreachable;
-    const loader_arg = std.fmt.allocPrint(b.allocator, "loader,addr=0x40200000,cpu-num=0,file={s}", .{b.getInstallPath(.bin, "ZadOS")}) catch unreachable;
-    defer b.allocator.free(loader_arg);
-    qemu_cmd.append("-device") catch unreachable;
-    qemu_cmd.append(loader_arg) catch unreachable;
-    //qemu_cmd.append("-device loader,addr=0x40800000,cpu-num=0,file=" ++ b.getInstallPath(.bin, "ZadOS")) catch unreachable;
+    qemu_cmd.append("-kernel") catch unreachable;
+    qemu_cmd.append(b.getInstallPath(.bin, "ZadOS")) catch unreachable;
+    //const loader_arg = std.fmt.allocPrint(b.allocator, "loader,addr=0x40200000,cpu-num=0,file={s}", .{b.getInstallPath(.bin, "ZadOS")}) catch unreachable;
+    //defer b.allocator.free(loader_arg);
+    //qemu_cmd.append("-device") catch unreachable;
+    //qemu_cmd.append(loader_arg) catch unreachable;
 
     const qemu = b.addSystemCommand(qemu_cmd.items);
     qemu.step.dependOn(b.getInstallStep());
@@ -220,7 +234,7 @@ pub fn build(b: *std.Build) void {
     for (qemu_cmd.items) |arg| {
         qemu_debug_cmd.append(arg) catch unreachable;
     }
-    qemu_debug_cmd.append("-s") catch unreachable;
+    //qemu_debug_cmd.append("-s") catch unreachable;
     qemu_debug_cmd.append("-S") catch unreachable;
     qemu_debug_cmd.append("-gdb") catch unreachable;
     qemu_debug_cmd.append("tcp::1234") catch unreachable;

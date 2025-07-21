@@ -1,6 +1,6 @@
 const std = @import("std");
 const fmt = std.fmt;
-//const build_options = @import("build_options");
+const build_options = @import("build_options");
 const scheduler = @import("scheduler.zig");
 const uart = @import("../arch/aarch64/uart.zig");
 
@@ -9,6 +9,9 @@ const LoggingError = error{};
 
 /// The Writer for the format function
 const Writer = std.io.Writer(*uart.Uart, LoggingError, logCallback);
+const bufferedWriter = std.io.bufferedWriter(Writer{ .context = &uart.uart0});
+
+const TerminalWriter = uart.UartWriter;
 
 ///
 /// The call back function for the std library format function.
@@ -27,9 +30,7 @@ const Writer = std.io.Writer(*uart.Uart, LoggingError, logCallback);
 fn logCallback(context: *uart.Uart, str: []const u8) LoggingError!usize {
     // Suppress unused var warning
     _ = context;
-    uart.print(str) catch {
-        @panic("Unable to write to UART\n");
-    };
+    uart.simple_print(str);
     return str.len;
 }
 
@@ -45,7 +46,12 @@ fn logCallback(context: *uart.Uart, str: []const u8) LoggingError!usize {
 ///
 pub fn log(comptime level: std.log.Level, comptime format: []const u8, args: anytype) void {
     scheduler.taskSwitching(false);
-    fmt.format(Writer{ .context = &uart.uart0 }, "[" ++ @tagName(level) ++ "] " ++ format, args) catch unreachable;
+    uart.printf("[" ++ @tagName(level) ++ "] " ++ format, args) catch {
+        // If the UART fails, we can't log anything, so just ignore the error
+        // This is a critical failure, but we can't do anything about it
+        uart.simple_print("Failed to log message: ");
+    };
+    //fmt.format(Writer{ .context = &uart.uart0}, "[" ++ @tagName(level) ++ "] " ++ format, args) catch unreachable;
     scheduler.taskSwitching(true);
 }
 
@@ -56,10 +62,11 @@ pub fn log(comptime level: std.log.Level, comptime format: []const u8, args: any
 ///     IN ser: Serial - The serial instance to use when logging
 ///
 pub fn init() void {
-    //switch (build_options.test_mode) {
-    //    .Initialisation => runtimeTests(),
-    //    else => {},
-    //}
+    uart.init();
+    switch (build_options.test_mode) {
+        .Initialisation => runtimeTests(),
+        else => {},
+    }
 }
 
 ///

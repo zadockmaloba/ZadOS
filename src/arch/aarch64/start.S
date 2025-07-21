@@ -6,7 +6,8 @@
 // Make _start global.
 .globl _start
 .type _start, @function
-//.org 0x80000
+// Ref: https://github.com/raspberrypi/tools/blob/master/armstubs/armstub8.S#L154
+.org 0x80000
 // Entry point for the kernel. Registers:
 // x0 -> 32 bit pointer to DTB in memory (primary core only) / 0 (secondary cores)
 // x1 -> 0

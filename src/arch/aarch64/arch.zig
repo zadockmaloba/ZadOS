@@ -17,6 +17,7 @@ const Keyboard = @import("../../kernel/keyboard.zig").Keyboard;
 const Task = @import("../../kernel/task.zig").Task;
 const MemProfile = @import("../../kernel/mem.zig").MemProfile;
 const kArrayList = @import("../../kernel/lib/ArrayList.zig").ArrayList;
+const build_options = @import("build_options");
 
 /// The type of a device.
 pub const Device = struct {}; // ARM64 devices will be defined later
@@ -139,9 +140,9 @@ pub const CpuState = packed struct {
 };
 
 /// The boot payload contains physical memory info and device tree pointer
-pub const BootPayload = struct {
-    dtb_ptr: u64, // Device Tree Binary pointer
-    mem_size: u64, // Total physical memory size
+pub const BootPayload = extern struct {
+    dtb_ptr: usize, // Device Tree Binary pointer
+    mem_size: usize, // Total physical memory size
 };
 
 /// The type of the payload passed to a virtual memory mapper
@@ -158,6 +159,26 @@ pub const VMM_MAPPER: vmm.Mapper(VmmPayload) = vmm.Mapper(VmmPayload){
 
 /// The size of each allocatable block of memory (64KB for ARM64)
 pub const MEMORY_BLOCK_SIZE: usize = 64 * 1024;
+
+export const KERNEL_STACK_SIZE: usize = 16 * 1024 * 1024; // 16MB kernel stack size
+
+export var KERNEL_STACK: [KERNEL_STACK_SIZE]u8 align(16) linksection(".stack") = [_]u8 {0} ** KERNEL_STACK_SIZE; // Kernel stack, 4KB aligned
+
+var __global_stack_alloc_t = std.heap.FixedBufferAllocator.init(&KERNEL_STACK);
+
+pub var KernelStackAllocator: std.mem.Allocator = __global_stack_alloc_t.allocator();
+
+pub fn delay(count: i32) void {
+    const c = count;
+    asm volatile (
+        \\1:
+        \\  subs %[cnt], %[cnt], #1
+        \\  bne 1b
+        :
+        : [cnt] "r"(c)
+        : "cc"
+    );
+}
 
 /// Data Memory Barrier - ensures all memory accesses before it complete
 pub fn ioWait() void {
@@ -219,6 +240,13 @@ fn writeUart(byte: u8) void {
     uart.putc(byte) catch {
         @panic("Error writing to UART\n");
     };
+}
+
+pub fn initMmio() void {
+    // Initialize the GIC (Generic Interrupt Controller)
+    gic.init();
+    // Initialize the UART for early output
+    uart.init();
 }
 
 ///
@@ -288,23 +316,23 @@ pub fn initMem(boot_payload: BootPayload) !MemProfile {
 
     // Create allocator with pre-aligned buffer
     log.debug("Using fixed buffer allocator with size: {} bytes\n", .{fixed_buffer_slice.len});
-    var fixed_allocator = heap.FixedBufferAllocator.init(&mem.fixed_buffer);
-    const allocator = fixed_allocator.allocator();
+    //var fixed_allocator = std.heap.FixedBufferAllocator.init(&mem.fixed_buffer);
+    const allocator = KernelStackAllocator;//fixed_allocator.allocator();
     log.debug("Fixed buffer allocator initialized\n", .{});
     //const reserved_physical_mem = std.ArrayList(mem.Range).init(allocator);
     //var reserved_virtual_mem = std.ArrayList(mem.Map).init(allocator);
 
     // Pre-allocate ArrayList capacity
-    const reserved_physical_mem = try kArrayList(mem.Range).initCapacity(
+    const reserved_physical_mem = kArrayList(mem.Range).init(
         allocator,
-        16,
+        //16,
     );
     //defer reserved_physical_mem.deinit();
     log.debug("Reserved physical memory list initialized with capacity: {}\n", .{reserved_physical_mem.capacity()});
 
-    var reserved_virtual_mem = try kArrayList(mem.Map).initCapacity(
+    var reserved_virtual_mem = kArrayList(mem.Map).init(
         allocator,
-        16,
+        //16,
     );
     //defer reserved_virtual_mem.deinit();
     log.debug("Reserved virtual memory list initialized with capacity: {}\n", .{reserved_virtual_mem.capacity()});
@@ -346,8 +374,8 @@ pub fn initMem(boot_payload: BootPayload) !MemProfile {
         .physaddr_start = @as([*]u8, @ptrCast(&KERNEL_PHYSADDR_START)),
         .mem_kb = boot_payload.mem_size / 1024,
         .modules = &[_]mem.Module{},
-        .physical_reserved = reserved_physical_mem.items, //orelse return error.OutOfMemory,
-        .virtual_reserved = reserved_virtual_mem.items, //orelse return error.OutOfMemory,
+        .physical_reserved = reserved_physical_mem.itemsSlice(), //orelse return error.OutOfMemory,
+        .virtual_reserved = reserved_virtual_mem.itemsSlice(), //orelse return error.OutOfMemory,
         .fixed_allocator = mem.fixed_buffer_allocator,
     };
 }
